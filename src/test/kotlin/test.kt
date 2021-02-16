@@ -1,17 +1,7 @@
-import org.antlr.v4.runtime.CharStreams
-import org.antlr.v4.runtime.CommonTokenStream
-import quova.antlr.gen.QuovaLexer
-import quova.antlr.gen.QuovaParser
+@file:JvmName("Tests")
+
+import java.io.File
 
 fun main() {
-    val src = """
-        void main() {
-            println("Hello World!");
-        }
-    """.trimIndent()
-
-    val lexer = QuovaLexer(CharStreams.fromString(src))
-    val parser = QuovaParser(CommonTokenStream(lexer))
-
-    parser.quovaFile()
+    quova.compiler.Compiler.compile(File("D:\\IdeaProjects\\Quova\\compileTest\\CompileTest.qvm"))
 }

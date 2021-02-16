@@ -56,14 +56,13 @@ name
     | DEPENDENCIES
     | IMPL
     | ONLY_COMPILE
-    | ONLY_RUNTIME)
+    | ONLY_RUNTIME
+    | variableCall)
     (DOT name)?
-    | variableCall
     ;
 
 versionName
-    : NUMBER (DOT NUMBER)* DASH_SNAPSHOT?
-    | variableCall
+    : (NUMBER | variableCall) (DOT NUMBER)* DASH_SNAPSHOT?
     ;
 
 text

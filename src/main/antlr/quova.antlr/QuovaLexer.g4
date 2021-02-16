@@ -1,12 +1,5 @@
 lexer grammar QuovaLexer;
 
-/*@members {
-private int inStringExpr = 0;
-private java.util.Stack<Integer> inStringExprCurls = new java.util.Stack<>();
-{ inStringExprCurls.push(0); }
-private java.util.Stack<Boolean> stringTypes = new java.util.Stack<>();
-}*/
-
 ShebangLine: '#!' .*? NL;
 
 LineComment: '//' .*? (NL|EOF) -> channel(HIDDEN);
@@ -184,8 +177,8 @@ fragment Exponent: [eE] [+-]? IntegerLiteral;
 
 CHAR_LITERAL: '\'' (~[\\'] | EscapeSeq | '\\\'') '\'';
 
-MULTILINE_STRING_LITERAL: '"""' {stringTypes.push(true);} -> pushMode(MULTILINE_STRING);
-STRING_LITERAL: '"' {stringTypes.push(false);} -> pushMode(STRING);
+MULTILINE_STRING_LITERAL: '"""' -> pushMode(MULTILINE_STRING);
+STRING_LITERAL: '"'  -> pushMode(STRING);
 
 fragment EscapeSeq: '\\' ([rntf\\] | 'u' HexDigit HexDigit HexDigit HexDigit | Digit);
 
@@ -208,7 +201,7 @@ END: '"' -> popMode;
 
 mode MULTILINE_STRING;
 
-MULTILINE_STRING_EXPR: '${' {++inStringExpr; inStringExprCurls.push(0);} -> type(COMPLEX_EXPR), pushMode(DEFAULT_MODE);
+MULTILINE_STRING_EXPR: '${' -> type(COMPLEX_EXPR), pushMode(DEFAULT_MODE);
 
 MULTILINE_CHARACTERS: (~'$' | '$' ~'{')+ -> type(CHARACTERS);
 
