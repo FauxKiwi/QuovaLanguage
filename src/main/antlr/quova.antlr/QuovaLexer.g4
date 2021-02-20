@@ -13,6 +13,7 @@ AT_FILE: '@file:';
 
 PACKAGE: 'package';
 IMPORT: 'import';
+FROM: 'from';
 
 CLASS: 'class';
 INTERFACE: 'interface';
@@ -49,6 +50,7 @@ CASE: 'case';
 BREAK: 'break';
 CONTINUE: 'continue';
 RETURN: 'return';
+THROW: 'throw';
 
 TRUE: 'true';
 FALSE: 'false';
@@ -67,9 +69,14 @@ BITFIELD: 'bitfield';
 CONSTRUCTOR: 'constructor';
 THROWS: 'throws';
 SEALED: 'sealed';
+INNER: 'inner';
 DEFAULT: 'default';
 GET: 'get';
 SET: 'set';
+
+STRICTFP: 'strictfp';
+SYNCHRONIZED: 'synchronized';
+NATIVE: 'native';
 
 PUBLIC: 'public';
 PRIVATE: 'private';
@@ -90,8 +97,13 @@ REIFIED: 'reified';
 OUT: 'out';
 
 CONST: 'const';
+VOLATILE: 'volatile';
+TRANSIENT: 'transient';
 
 STATIC: 'static';
+
+RESERVED: 'Byte' | 'UByte' | 'Short' | 'Int' | 'UInt' | 'Long' | 'ULong' | 'Float' | 'Double' | 'Unit' | 'Any';
+BACKSTICK: 'is';
 
 // Symbols
 
@@ -125,6 +137,7 @@ RANGE: '..';
 SHL: '<<';
 SHR: '>>';
 USHR: '>>>';
+SPACESHIP: '<=>';
 LE: '<=';
 GE: '>=';
 EQEQ: '==';

@@ -8,6 +8,7 @@ quovaFile
 
 importHeader
     : IMPORT identifier (DOT STAR | AS simpleIdentifier)? SEMI
+    | FROM identifier IMPORT (STAR | simpleIdentifier (COMMA simpleIdentifier)*) SEMI
     ;
 
 //////////////////
@@ -34,7 +35,7 @@ typeDeclaration
     ;
 
 classDeclaration
-    : inheritanceModifier? SEALED? CLASS simpleIdentifier variantTypeParameters? valueParameters? supertypes? (classBody | SEMI)
+    : inheritanceModifier? (SEALED | INNER)* CLASS simpleIdentifier variantTypeParameters? valueParameters? supertypes? (classBody | SEMI)
     ;
 
 singletonDeclaration
@@ -42,7 +43,7 @@ singletonDeclaration
     ;
 
 interfaceDeclaration
-    : ABSTRACT? INTERFACE simpleIdentifier variantTypeParameters? (COLON type (COMMA type)*)? (interfaceBody | SEMI)?
+    : ABSTRACT? INTERFACE simpleIdentifier variantTypeParameters? (COLON userType (COMMA userType)*)? (interfaceBody | SEMI)?
     ;
 
 enumClassDeclaration
@@ -70,11 +71,11 @@ functionDeclaration
     ;
 
 propertyDeclaration
-    : annotation* visibilityModifier? inheritanceModifier? (READONLY | CONST)? typeOrVar property (COMMA property)* SEMI
+    : annotation* propertyModifiers (READONLY | CONST)? typeOrVar property (COMMA property)* SEMI
     ;
 
 property
-    :  simpleIdentifier ((LCURL (getter setter? | setter getter) RCURL)? (ASSIGN expression)? | LANGLE DASH expression)
+    :  simpleIdentifier ((LCURL (getter setter? | setter getter) RCURL)? (ASSIGN value=expression)? | LANGLE DASH delegate=expression)
     ;
 
 ///////////////////////
@@ -98,7 +99,7 @@ primitiveEnumBody
     ;
 
 enumClassBody
-    : LCURL (enumClassEntries* | enumClassEntries+ SEMI classMember* | classMember+) RCURL
+    : LCURL (enumClassEntries | enumClassEntries SEMI classMember* | classMember+) RCURL
     ;
 
 annotationMembers
@@ -117,11 +118,15 @@ singletonMember
     ;
 
 constructor
-    : annotation* visibilityModifier* typeParameters? (userType | CONSTRUCTOR) valueParameters constructorDelegations? functionBody?
+    : annotation* visibilityModifier? typeParameters? (simpleIdentifier | CONSTRUCTOR) valueParameters constructorDelegations? (SEMI | functionBody)
     ;
 
 constructorDelegations
-    : COLON
+    : COLON constructorDelegation (COMMA constructorDelegation)*
+    ;
+
+constructorDelegation
+    : (THIS | superLiteral) valueArguments
     ;
 
 initBlock
@@ -141,7 +146,7 @@ enumClassEntry
     ;
 
 annotationParameter
-    : type simpleIdentifier LPAREN RPAREN (DEFAULT expression)?
+    : annotation* type simpleIdentifier LPAREN RPAREN (DEFAULT expression)?
     ;
 
 functionBody
@@ -154,7 +159,7 @@ valueParameters
     ;
 
 valueParameter
-    : annotation* VAR? type ELLIPSIS? identifier
+    : annotation* VAR? type ELLIPSIS? simpleIdentifier (ASSIGN expression)?
     ;
 
 typeParameters
@@ -170,7 +175,7 @@ variantTypeParameters
     ;
 
 variantTypeParameter
-    : annotation* varianceModifier? typeParameter
+    : annotation* varianceModifier? simpleIdentifier (COLON type (AMP type)*)?
     ;
 
 valueArguments
@@ -186,7 +191,7 @@ typeArguments
     ;
 
 typeArgument
-    : varianceModifier? userType
+    : varianceModifier? type
     | QUEST
     ;
 
@@ -195,7 +200,7 @@ supertypes
     ;
 
 supertype
-    : type (valueArguments | LANGLE DASH expression)?
+    : userType (valueArguments | LANGLE DASH expression)?
     ;
 
 throwExceptions
@@ -207,11 +212,11 @@ getter
     ;
 
 setter
-    : SET (SEMI | LPAREN setterParameter RPAREN functionBody)
+    : annotation* SET (SEMI | LPAREN setterParameter RPAREN functionBody)
     ;
 
 setterParameter
-    : annotation* type? simpleIdentifier
+    : annotation* simpleIdentifier
     ;
 
 ////////////////
@@ -273,7 +278,7 @@ forEachCondition
     ;
 
 whileStatement
-    : DO statementBody WHILE LPAREN expression RPAREN
+    : DO statementBody WHILE LPAREN expression RPAREN SEMI
     | WHILE LPAREN expression RPAREN statementBody
     ;
 
@@ -284,6 +289,7 @@ statementBody
 jumpStatement
     : BREAK simpleIdentifier
     | CONTINUE
+    | THROW expression
     | RETURN expression (AT simpleIdentifier)?
     ;
 
@@ -305,19 +311,21 @@ operatorExpression
     : operatorExpression (INCR | DECR | BANG BANG | (typeArguments? valueArguments) | indexingSuffix | callSuffix) #postfix
     | (PLUS | DASH | INCR | DECR | BANG | TILDE | COLONCOLON) operatorExpression #prefix
     | LPAREN type RPAREN QUEST? operatorExpression #cast
-    | operatorExpression (STAR | SLASH | PERCENT) operatorExpression #sum
-    | operatorExpression (PLUS | DASH) operatorExpression # product
+    | operatorExpression (STAR | SLASH | PERCENT) operatorExpression #product
+    | operatorExpression (PLUS | DASH) operatorExpression #sum
     | operatorExpression (SHL | SHR | USHR) operatorExpression #shift
     | operatorExpression RANGE operatorExpression #range
     | operatorExpression ELVIS operatorExpression #elvis
     | operatorExpression (inOperator | instanceOperator) operatorExpression #namedCheck
+    | operatorExpression SPACESHIP operatorExpression #spaceship
     | operatorExpression (LANGLE | RANGLE | LE | GE) operatorExpression #comparison
     | operatorExpression (EQEQ | NOT_EQ | EQEQEQ | NOT_EQEQ) operatorExpression #equality
     | operatorExpression AMP operatorExpression #bitAnd
+    | operatorExpression CARET operatorExpression #bitXor
     | operatorExpression PIPE operatorExpression #bitOr
     | operatorExpression CONJ operatorExpression #conjunction
     | operatorExpression DISJ operatorExpression #disjunction
-    | <assoc=right> operatorExpression QUEST operatorExpression COLON operatorExpression #ternary
+    | <assoc=right> operatorExpression QUEST expression COLON expression #ternary
     | ELLIPSIS operatorExpression #spread
     | operatorExpression assignmentOperator operatorExpression #assign
     | primaryExpression #primary
@@ -333,7 +341,7 @@ callSuffix
     ;
 
 forSuffix
-    : FOR (LPAREN classicForCondition RPAREN | forEachCondition | LPAREN forEachCondition RPAREN)
+    : FOR forEachCondition (IF expression)?
     ;
 
 primaryExpression
@@ -344,7 +352,7 @@ primaryExpression
     ;
 
 constructorInvocation
-    : NEW type typeArguments? (valueArguments | initializerList)
+    : NEW userType typeArguments? (valueArguments | initializerList)
     ;
 
 switchExpression
@@ -353,7 +361,7 @@ switchExpression
     ;
 
 switchCondition
-    : (CASE | inOperator | instanceOperator) expression (COMMA expression)*
+    : (CASE | inOperator | instanceOperator) expression ((COMMA expression)+ | COMMA switchCondition)?
     ;
 
 whenExpression
@@ -409,11 +417,11 @@ multilineStringLiteralContent
     ;
 
 superLiteral
-    : SUPER (LANGLE type RANGLE)?
+    : SUPER (LANGLE userType RANGLE)?
     ;
 
 lambda
-    : (lambdaParameter | LPAREN lambdaParameter (COMMA lambdaParameter)* RPAREN) ARROW (expression | lambdaBody)
+    : (lambdaParameter | LPAREN (lambdaParameter (COMMA lambdaParameter)*)? RPAREN) ARROW (expression | lambdaBody)
     ;
 
 lambdaParameter
@@ -512,11 +520,11 @@ userType
     ;
 
 functionType
-    : SUSPEND FUNCTION LANGLE type LPAREN (type (COMMA type)*)? RPAREN RANGLE
+    : SUSPEND? FUNCTION LANGLE typeOrVoid LPAREN (type (COMMA type)*)? RPAREN RANGLE
     ;
 
 annotation
-    : AT simpleIdentifier valueParameters?
+    : AT identifier typeArguments? valueArguments?
     ;
 
 ///////////////
@@ -529,7 +537,10 @@ functionModifiers
     | TAILREC
     | STATIC
     | DEFAULT
-    | SUSPEND )*
+    | SUSPEND
+    | STRICTFP
+    | SYNCHRONIZED
+    | NATIVE )*
     ;
 
 visibilityModifier
@@ -549,6 +560,15 @@ varianceModifier
     | OUT
     ;
 
+propertyModifiers
+    : visibilityModifier? inheritanceModifier?
+    ( READONLY
+    | STATIC
+    | CONST
+    | VOLATILE
+    | TRANSIENT )*
+    ;
+
 
 /////////////////
 // IDENTIFIERS //
@@ -560,4 +580,33 @@ identifier
 
 simpleIdentifier
     : IDENTIFIER
+    | RESERVED
+    | BACKSTICK
+    | IMPORT
+    | ENUM
+    | RECORD
+    | TYPEDEF
+    | VAR
+    | DEF
+    | AS
+    | BITFIELD
+    | CONSTRUCTOR
+    | THROWS
+    | SEALED
+    | DEFAULT
+    | GET
+    | SET
+    | PUBLIC
+    | PRIVATE
+    | INTERNAL
+    | PROTECTED
+    | READONLY
+    | FINAL
+    | ABSTRACT
+    | INLINE
+    | TAILREC
+    | SUSPEND
+    | REIFIED
+    | OUT
+    | CONST
     ;

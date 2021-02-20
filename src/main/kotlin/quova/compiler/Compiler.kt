@@ -1,9 +1,5 @@
 package quova.compiler
 
-import org.antlr.v4.runtime.CharStreams
-import org.antlr.v4.runtime.CommonTokenStream
-import quova.antlr.gen.QuovaLexer
-import quova.antlr.gen.QuovaParser
 import quova.internal.system
 import java.io.File
 import java.io.FileReader
@@ -60,7 +56,7 @@ object Compiler {
             compiledFile.createNewFile()
 
             FileWriter(compiledFile).use { writer ->
-                writer.write(quovaToKt(it.nameWithoutExtension, quovaSrc))
+                writer.write(/*quovaToKt(it.nameWithoutExtension, quovaSrc)*/QuovaCompiler(quovaSrc).compile().toString())
             }
 
             println("... Done") // (@ ${compiledFile.absolutePath})
@@ -75,7 +71,7 @@ object Compiler {
         println("Compilation finished in ${System.currentTimeMillis() - startTimestamp}ms")
     }
 
-    private fun quovaToKt(fileName: String, quova: String): String {
+    /*private fun quovaToKt(fileName: String, quova: String): String {
         val lexer = QuovaLexer(CharStreams.fromString(quova))
         val parser = QuovaParser(CommonTokenStream(lexer))
         return """
@@ -84,7 +80,7 @@ object Compiler {
                 println("Hello World!");
             }
         """.trimIndent()
-    }
+    }*/
 
     private fun visitWithAllChildren(dir: File, enter: (File) -> Boolean, leave: (File) -> Unit) {
         val children = dir.listFiles()

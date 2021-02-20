@@ -1,0 +1,219 @@
+// Top level functions: Not in a class
+// Also, public is the default visibility
+
+void main() {
+    println("Hello World!");
+}
+
+
+// Static (singleton) classes: All members are static
+
+static class Utils {
+
+    // Expression function bodies with '=>'
+
+    int addTogether(int a, int b) => a + b;
+}
+
+
+// Internal visibility
+// Type interference
+
+internal var x = 5; // int
+
+
+// Properties with getters and setters
+
+private int i = 0;
+int iPlus1 { get() => i + 1; set(v) { i = v - 1; } };
+
+
+// Compile time constant values (only primitives and String)
+
+const int FIVE = 5;
+
+
+// Delegates
+
+int delegatingToI <- ::i;
+readonly String lazyInitialized <- lazy(() -> {
+    // Something complex
+    "Result" // Last expression in lambda is its return value, notice the absence of ';'
+});
+
+
+// Type variance
+
+class WithOutParameter <in P> { // Declaration site
+    Collection<out CharSequence> doSomething() { // Use site (same as "? extends String")
+        String cs = "Foo";
+        return listOf(cs);
+    }
+}
+
+
+// Extension methods / properties
+
+//TODO: String: void echo() => println(this); // 'this' is the receiver (String)
+
+
+// Anonymous function types
+
+function<int(int, int)> addFunc = Utils::addTogether;
+
+
+// Inline functions
+// Reified type parameters (only in inline functions)
+
+inline <reified T> void printWithClass(T t) {
+    println("Class of $t : ${T.class}"); // String templates with '$'
+}
+
+
+// Range operator
+
+void printNumbers(int to) {
+    for (i : 0..to)
+        println(i);
+}
+
+
+// Null safety
+
+String? a = null; // "String a = null" doesn't compile
+int? nullableInt = null; // nullable primitives
+
+var l = a?.length; // Safe call operator
+String aOrEmpty { get() => a ?: ""; }; // Elvis operator
+var aNotNull = a!!; // Null assertion
+
+//private String! flexible; // ONLY private properties can be null flexible (init to null)
+//flexible.length; // NullPointerException
+
+
+// Unsigned types
+
+byte b = (byte) 255; // Byte is unsigned by default, like in C#
+sbyte sb = (sbyte) -1;
+
+uint anUnsignedInt = 13523462;
+
+
+// Decimal type (Fixed point number)
+
+//decimal dec = 1.234m; (Coming soon)
+
+
+// Operator overloading
+
+record Point(int x, int y) {
+    //TODO: Point operator + (Point p) => new Point(x + p.x, y + p.y);
+}
+
+
+// Type interference in initializers
+
+var array = { 1, 2, 3 }; // same as new int[] ...
+List<int> list = { 1, 2, 3 }; // same as new List ...
+//TODO: HashMap<String, int> map = { "1" : 1 , "2" : 2 } // same as new HashMap ...
+
+
+// Initializers as constructors
+
+var string = new String {{ 'H', 'i', '!' }}; // initializing from CharArray
+
+
+// Sealed classes: Subclasses only permitted in the same file
+// Also, there can be more than one public class in a file
+
+sealed class Supertype {
+
+    // Nested classes are static by default, specify inner explicitly
+    // Colon to extend / implement, no need for explicit declaration
+    // Constructor invocation in extension, no need for an additional constructor
+
+    class Subtype : Supertype(); // Class body can be omitted
+
+
+    // Class parameters, serve as constructor
+
+    class WithClassParameters(int a, int b) : Supertype() {
+        int a = a;
+        int aPlusB = a + b;
+
+
+        // constructor delegation with ':'
+
+        WithClassParameters(int a, float sum) : this(a, (int) sum - a);
+    }
+}
+
+
+// Typedefs, useful for function or generic types
+
+//TODO: typedef StringConsumer = function<void(String)>;
+//TODO: typedef StringMap = HashMap<String, List<String>>;
+
+
+// Value (primitive) classes
+
+inline class BoxedInt(int i);
+
+
+// Unused lambda parameters, declared with '_'
+
+StringConsumer printNothing = _ -> print("Nothing");
+
+
+// Delegation, allowing multiple inheritance
+
+interface SecondSuperclassStructure {
+    void respond();
+}
+
+class SecondSuperclass : SecondSuperclassStructure {
+    @Override
+    void respond() {
+        println("Hi!");
+    }
+}
+
+class MultipleInheritance : Supertype(), SecondSuperclassStructure <- new SecondSuperclass() {
+    {
+        respond(); // Prints "Hi!"
+    }
+}
+
+
+// Mutable record / method parameters
+
+record ContainsInt(var int i) {
+    void setIToXPlus1(var int x) {
+        x += 1; // Keep in mind x is now shadowed
+        i = x;
+    }
+}
+
+
+// Unsafe memory access
+
+/*void testUnsafe() {
+   unsafe {
+      int* ptr = unsafe { 5 };
+      println(*i); // 5
+      
+      // Structs
+      struct point(int a, int b);
+      point p = unsafe { 2, 4 };
+      var pointerToStruct = &p; // type point*
+
+      // Structural casts
+      struct vec2(int x, int y);
+      vec2 v = *(vec2*)&p;
+
+      // Unions
+      union intOrFloat(int i, float f);
+      var iOrF = unsafe intOrFloat(5f);
+      var bitRepresentation = iOrF.i;
+   }
+}*/
