@@ -485,8 +485,7 @@ data class InitBlock(
     val static: Boolean,
     val block: Block
 ) : ClassMember, SingletonMember {
-    override fun toString(): String =
-        block.toString()
+    override fun toString(): String = "init $block"
 }
 
 data class EnumEntry(
@@ -683,19 +682,34 @@ interface SimpleStatement
 data class LabeledStatement(
     val label: String,
     val statement: Statement
-) : Statement
+) : Statement {
+    override fun toString(): String = "$label@ $statement"
+}
 
 data class Assignment(
     val left: Expression,
     val right: Expression,
     val operator: AssignmentOperator
-) : Statement
+) : Statement {
+    override fun toString(): String = "$left $operator $right"
+}
 
 data class IfStatement(
     val condition: Expression,
     val ifBody: StatementBody,
     val elseBody: StatementBody?
-) : Statement, SimpleStatement
+) : Statement, SimpleStatement {
+    override fun toString(): String = buildString {
+        append("if (")
+        append(condition)
+        append(") ")
+        append(ifBody)
+        elseBody?.let {
+            append(" else ")
+            append(it)
+        }
+    }
+}
 
 data class ForStatement(
     val condition: Either<ClassicCondition, ForEachCondition>,
@@ -710,36 +724,126 @@ data class ForStatement(
             val type: Either<Type, VAR>?,
             val name: String,
             val value: Expression
-        )
+        ) {
+            override fun toString(): String = buildString {
+                append(type ?: "var")
+                append(' ')
+                append(name)
+                append(" = ")
+                append(value)
+            }
+        }
     }
 
     data class ForEachCondition(
         val type: Either<Type, VAR>?,
         val name: String,
         val inValue: Expression
-    )
+    ) {
+        override fun toString(): String = buildString {
+            append(name)
+            if (type is Either.A) {
+                append(": ")
+                append(type.value)
+            }
+            append(" in ")
+            append(inValue)
+        }
+    }
+
+    override fun toString(): String = condition.either({
+        buildString {
+            append("run {")
+            it.variables.forEach {
+                append(it)
+                nl()
+            }
+            append("while (")
+            if (it.expressions.size <= 1)
+                it.expressions.forEach {
+                    append(it)
+                }
+            else
+                it.expressions.joinTo(this, "&&") { ex ->
+                    "($ex)"
+                }
+            append(") {\n")
+            when (body) {
+                is Block -> {
+                    body.statements.forEach { st ->
+                        append(st)
+                        nl()
+                    }
+                }
+                is Statement -> {
+                    append(body)
+                }
+            }
+            it.statements.forEach { st ->
+                append(st)
+                nl()
+            }
+            append("}}")
+        }
+    }, {
+        buildString {
+            append("for (")
+            append(it)
+            append(") ")
+            append(body)
+        }
+    })
 }
 
 data class WhileStatement(
-    val BodyFirst: Boolean, // true for do-while, else false
+    val bodyFirst: Boolean, // true for do-while, else false
     val condition: Expression,
     val body: StatementBody
-) : Statement, SimpleStatement
+) : Statement, SimpleStatement {
+    override fun toString(): String = if (bodyFirst) buildString {
+        append("do ")
+        append(body)
+        append(" while (")
+        append(condition)
+        append(')')
+    } else buildString {
+        append(" while (")
+        append(condition)
+        append(") ")
+        append(body)
+    }
+}
 
 data class JumpStatement(
     val order: Order,
     val at: String?, // for break and return
     val value: Expression? // for throw and return
 ) : Statement {
-    enum class Order {
-        BREAK, CONTINUE, THROW, RETURN
+    enum class Order(val string: String) {
+        BREAK("break"), CONTINUE("continue"), THROW("throw"), RETURN("return");
+
+        override fun toString(): String = string
+    }
+
+    override fun toString(): String = buildString {
+        append(order)
+        at?.let {
+            append('@')
+            append(it)
+        }
+        value?.let {
+            append(' ')
+            append(it)
+        }
     }
 }
 
 interface StatementBody
 // :-> Block, Statement, PASS
 
-object PASS : StatementBody
+object PASS : StatementBody {
+    override fun toString(): String = ";"
+}
 
 ///////////////////////////////////////////////////////////////////////////
 // Expressions
@@ -747,6 +851,8 @@ object PASS : StatementBody
 
 interface Expression : Statement, SimpleStatement {
     val priority: Int
+
+    fun surroundIfHigher(other: Expression): String = if (other.priority > priority) "($other)" else other.toString()
 }
 // :-> PrimaryExpression, OperatorExpression, ListComprehension
 
@@ -754,7 +860,9 @@ class Priority(override val priority: Int) : Expression
 
 data class Block(
     val statements: List<Statement>
-) : Statement, SimpleStatement, StatementBody
+) : Statement, SimpleStatement, StatementBody {
+    override fun toString(): String = statements.joinToString("\n", "{\n", "\n}")
+}
 
 sealed class OperatorExpression(priority: Int) : Expression by Priority(priority) {
     companion object {
@@ -767,54 +875,75 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     ) : OperatorExpression(++counter) {
         interface Postfix
 
-        enum class Operator : Postfix {
-            INCR, DECR, NOT_NULL
+        enum class Operator(val string: String) : Postfix {
+            INCR("++"), DECR("--"), NOT_NULL("!!");
+
+            override fun toString(): String = string
         }
 
         data class Invocation(
             val typeArguments: List<TypeArgument>,
             val valueArguments: List<ValueArgument>
-        ) : Postfix
+        ) : Postfix {
+            override fun toString(): String = buildString {
+                if (typeArguments.isNotEmpty())
+                    typeArguments.joinTo(this, prefix = "<", postfix = ">")
+                valueArguments.joinTo(this, prefix = "(", postfix = ")")
+            }
+        }
 
         data class Indexing(
             val indices: List<Expression>
-        ) : Postfix
+        ) : Postfix {
+            override fun toString(): String = indices.joinToString(prefix = "[", postfix = "]")
+        }
 
         data class Call(
             val operator: Operator,
             val value: Either<Expression, CLASS>
         ) : Postfix {
-            enum class Operator {
-                SAFE, DOT, REF
+            enum class Operator(val string: String) {
+                SAFE("?."), DOT("."), REF("::");
+
+                override fun toString(): String = string
             }
 
-            object CLASS
+            object CLASS {
+                override fun toString(): String = "class"
+            }
+
+            override fun toString(): String = "$operator$value"
         }
+
+        override fun toString(): String = "${surroundIfHigher(value)}$postfix"
     }
 
     data class Prefix(
         val operator: Operator,
         val value: Expression
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            PLUS, MINUS, INCR, DECR, NOT, COMP, REF
-        }
-    }
+        enum class Operator(val string: String, val after: String = "") {
+            PLUS("+"), MINUS("-"), INCR("++"), DECR("--"), NOT("!"),
+            COMP("quova.internal.bitComplement(", ")"), REF("::");
 
-    data class Cast(
-        val type: Type,
-        val safe: Boolean,
-        val value: Expression
-    ) : OperatorExpression(++counter)
+            override fun toString(): String = string
+        }
+
+        override fun toString(): String = "$operator${surroundIfHigher(value)}${operator.after}"
+    }
 
     data class Sum(
         val left: Expression,
         val right: Expression,
         val operator: Operator
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            PLUS, MINUS
+        enum class Operator(val string: String) {
+            PLUS("+"), MINUS("-");
+
+            override fun toString(): String = string
         }
+
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
 
     data class Product(
@@ -822,9 +951,43 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         val right: Expression,
         val operator: Operator
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            TIMES, DIV, REM
+        enum class Operator(val string: String) {
+            TIMES("*"), DIV("/"), REM("%");
+
+            override fun toString(): String = string
         }
+
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
+    }
+
+    data class Range(
+        val left: Expression,
+        val right: Expression
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left..$right"
+    }
+
+    data class Elvis(
+        val left: Expression,
+        val right: Expression
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left ?: $right"
+    }
+
+    data class NamedCheck(
+        val left: Expression,
+        val right: Expression,
+        val operator: Either<InOperator, InstanceOperator>
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
+    }
+
+    data class Cast(
+        val type: Type,
+        val safe: Boolean,
+        val value: Expression
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$value ${if (safe) "as?" else "as"} $type"
     }
 
     data class Shift(
@@ -832,40 +995,55 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         val right: Expression,
         val operator: Operator
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            LEFT, RIGHT, U_RIGHT
+        enum class Operator(val string: String) {
+            LEFT("shl"), RIGHT("shr"), U_RIGHT("ushr");
+
+            override fun toString(): String = string
         }
+
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
 
-    data class Range(
+    data class BitAnd(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left and $right"
+    }
 
-    data class Elvis(
+    data class BitXor(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left xor $right"
+    }
 
-    data class NamedCheck(
+    data class BitOr(
         val left: Expression,
-        val right: Expression,
-        val operator: Either<InOperator, InstanceOperator>
-    ) : OperatorExpression(++counter)
+        val right: Expression
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left or $right"
+    }
 
     data class Spaceship(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left.compareTo($right)"
+    }
 
     data class Comparison(
         val left: Expression,
         val right: Expression,
         val operator: Operator
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            LT, GT, LE, GE
+        enum class Operator(val string: String) {
+            LT("<"), GT(">"), LE("<="), GE(">=");
+
+            override fun toString(): String = string
         }
+
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
 
     data class Equality(
@@ -873,51 +1051,53 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         val right: Expression,
         val operator: Operator
     ) : OperatorExpression(++counter) {
-        enum class Operator {
-            EQ, NOT_EQ, IDENTITY, NOT_IDENTITY
+        enum class Operator(val string: String) {
+            EQ("=="), NOT_EQ("!="), IDENTITY("==="), NOT_IDENTITY("!==");
+
+            override fun toString(): String = string
         }
+
+        override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
-
-    data class BitAnd(
-        val left: Expression,
-        val right: Expression
-    ) : OperatorExpression(++counter)
-
-    data class BitXor(
-        val left: Expression,
-        val right: Expression
-    ) : OperatorExpression(++counter)
-
-    data class BitOr(
-        val left: Expression,
-        val right: Expression
-    ) : OperatorExpression(++counter)
 
     data class Conjunction(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left && $right"
+    }
 
     data class Disjunction(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "$left || $right"
+    }
 
     data class Ternary(
         val condition: Expression,
         val ifTrue: Expression,
         val ifFalse: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "if ($condition) $ifTrue else $ifFalse"
+    }
 
     data class Spread(
         val value: Expression
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = "*$value"
+    }
 
     data class Assignment(
         val left: Expression,
         val right: Expression,
         val operator: AssignmentOperator
-    ) : OperatorExpression(++counter)
+    ) : OperatorExpression(++counter) {
+        override fun toString(): String = if (operator.nonNative)
+            "($left $operator $right).also { `av-` -> $left = `av-` }"
+        else
+            "$right.also { `av-` -> $left $operator `av-` }"
+    }
 }
 
 open class PrimaryExpression : Expression by Priority(-1)
@@ -927,13 +1107,44 @@ data class ListComprehension(
     val mapping: Expression,
     val forEach: ForStatement.ForEachCondition,
     val ifCondition: Expression?
-) : Expression by Priority(++OperatorExpression.counter)
+) : Expression by Priority(++OperatorExpression.counter) {
+    override fun toString(): String = buildString {
+        append(forEach.inValue)
+        val lambdaParameter = buildString {
+            append(forEach.name)
+            if (forEach.type is Either.A) {
+                append(": ")
+                append(forEach.type)
+            }
+        }
+        ifCondition?.let {
+            append(".filter { ")
+            append(lambdaParameter)
+            append(" -> ")
+            append(it)
+            append(" }")
+        }
+        append(".map { ")
+        append(lambdaParameter)
+        append(" -> ")
+        append(mapping)
+        append(" }")
+    }
+}
 
 data class ConstructorInvocation(
     val type: UserType,
     val typeArguments: List<TypeArgument>,
     val arguments: Either<List<ValueArgument>, InitializerList>
-) : PrimaryExpression()
+) : PrimaryExpression() {
+    override fun toString(): String = buildString {
+        append(type)
+        if (typeArguments.isNotEmpty())
+            typeArguments.joinTo(this, prefix = "<", postfix = ">")
+        val args = arguments.either({ it }, { (it.arguments as Either.A).value }) //TODO: Dictionary initializer
+        args.joinTo(this, prefix = "(", postfix = ")")
+    }
+}
 
 interface Switch : Statement
 // :-> SwitchExpression, WhenExpression
@@ -955,7 +1166,36 @@ data class SwitchExpression(
             // :-> CASE, InOperator, IsOperator
 
             object CASE : Type
+
+            override fun toString(): String = buildString {
+                if (type !is CASE) {
+                    append(type)
+                    append(' ')
+                }
+                append(values)
+            }
         }
+
+        override fun toString(): String = buildString {
+            condition.joinTo(this)
+            append(" -> ")
+            append(body)
+        }
+    }
+
+    override fun toString(): String = buildString {
+        append("when (")
+        append(subject)
+        append(") {\n")
+        branches.forEach {
+            append(it)
+            nl()
+        }
+        elseBody?.let {
+            append(it)
+            nl()
+        }
+        append('}')
     }
 }
 
@@ -966,7 +1206,26 @@ data class WhenExpression(
     data class Branch(
         val conditions: List<Expression>,
         val body: StatementBody
-    )
+    ) {
+        override fun toString(): String = buildString {
+            conditions.joinTo(this)
+            append(" -> ")
+            append(body)
+        }
+    }
+
+    override fun toString(): String = buildString {
+        append("when {\n")
+        branches.forEach {
+            append(it)
+            nl()
+        }
+        elseBody?.let {
+            append(it)
+            nl()
+        }
+        append('}')
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -980,13 +1239,13 @@ open class Literal : PrimaryExpression()
 data class StringLiteral(
     val content: String
 ) : Literal() {
-    override fun toString(): String = "\"$content\""
+    override fun toString(): String = content
 }
 
 data class MultilineStringLiteral(
     val content: String
 ) : Literal() {
-    override fun toString(): String = "\"\"\"$content\"\"\""
+    override fun toString(): String = "\"\"$content\"\""
 }
 
 object THIS : Literal() {
@@ -1081,8 +1340,8 @@ data class InitializerList(
 
 enum class AssignmentOperator(val string: String, val nonNative: Boolean = false) {
     ASSIGN("="), PLUS("+="), MINUS("-="), TIMES("*="), DIV("/="), MOD("%="),
-    AND(" and ", true), XOR(" xor ", true), OR(" or ", true),
-    SHL(" shl ", true), SHR(" shr", true), USHR(" ushr ", true),
+    AND("and", true), XOR("xor", true), OR("or", true),
+    SHL("shl", true), SHR("shr", true), USHR("ushr", true),
     COALESCING("?:", true);
 
     override fun toString(): String = string
@@ -1166,13 +1425,29 @@ data class FunctionType(
     val suspend: Boolean,
     val returnType: Type,
     val parameterTypes: List<Type>
-) : Type.Type
+) : Type.Type {
+    override fun toString(): String = buildString {
+        if (suspend)
+            append("suspend ")
+        parameterTypes.joinTo(this, prefix = "(", postfix = ")")
+        append(" -> ")
+        append(returnType)
+    }
+}
 
 data class Annotation(
     val name: String /*ID*/,
     val typeArguments: List<TypeArgument>,
     val valueArguments: List<ValueArgument>
-)
+) {
+    override fun toString(): String = buildString {
+        append(name)
+        if (typeArguments.isNotEmpty())
+            typeArguments.joinTo(this, prefix = "<", postfix = ">")
+        if (valueArguments.isNotEmpty())
+            valueArguments.joinTo(this, prefix = "(", postfix = ")")
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////
 // Modifiers
