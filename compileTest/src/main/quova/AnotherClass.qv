@@ -1,0 +1,3 @@
+public class AnotherClass {
+    public void saySomething() => println("Hello from another class");
+}

@@ -1,3 +1,8 @@
-void main() {
-    println("Hello World!");
+from java.io import File, FileReader, FileWriter;
+
+public void main() {
+    new AnotherClass().saySomething();
+    println(array.contentToString());
 }
+
+var array = { 1, 4, 9 };

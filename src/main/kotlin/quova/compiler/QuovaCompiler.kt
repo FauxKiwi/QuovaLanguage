@@ -19,7 +19,9 @@ class QuovaCompiler(val src: String) {
         QuovaFile(
             ctx.ShebangLine()?.text,
             ctx.identifier()?.text,
-            ctx.importHeader().map { visit(it) }/* + Import("quova", true, listOf(), null)*/,
+            ctx.importHeader().map { visit(it) }
+                    + Import("quova", true, listOf(), null)
+                    + Import("kotlin.Int", false, listOf(), "Integer"),
             run {
                 val list = mutableListOf<Declaration>()
                 ctx.declaration().forEach { declaration ->

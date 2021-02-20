@@ -56,16 +56,22 @@ data class QuovaModule(
         append("\"\nversion = \"")
         append(version)
         append("\"\n\n")
-        append(buildContext.variables.takeUnless { it.isEmpty() }?.joinToString(
-            "\n\t", "ext {\n\t", "\n}\n\n"
-        ) ?: "")
-        append(buildContext.repositories.takeUnless { it.isEmpty() }?.joinToString(
-            "\n\t", "repositories {\n\t", "\n}\n\n", transform = { "$it()" }
-        ) ?: "")
-        append(buildContext.dependencies.takeUnless { it.isEmpty() }?.joinToString(
-            "\n\t", "dependencies {\n\t", "\n}\n\n"
-        ) ?: "")
-        append(buildContext.others.takeUnless { it.isEmpty() }?.joinToString("\n\n") ?: "")
+        buildContext.variables.takeUnless { it.isEmpty() }?.joinTo(
+            this, "\n\t", "ext {\n\t", "\n}\n\n"
+        )
+        buildContext.repositories.joinTo(
+            this, "\n\t", "repositories {\n\tflatDir {\n\t\tdirs 'D:\\\\IdeaProjects\\\\Quova\\\\stdlib\\\\build\\\\libs'\n\t}\n\t", "\n}\n\n"
+        ) { "$it()" }
+        append("dependencies {\n\timplementation name: 'stdlib-1.0-SNAPSHOT'")
+        buildContext.dependencies.forEach {
+            append("\n\t")
+            append(it)
+        }
+        append("\n}")
+        buildContext.others.forEach {
+            append("\n\n")
+            append(it)
+        }
     }
 
     fun gradleSettings(): String = "rootProject.name = '$project'"
