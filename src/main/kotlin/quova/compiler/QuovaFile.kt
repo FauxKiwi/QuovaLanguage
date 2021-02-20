@@ -1,7 +1,6 @@
 package quova.compiler
 
 import quova.Either
-import quova.type as `-type-`
 
 data class QuovaFile(
     val shebangLine: String?,
@@ -27,6 +26,14 @@ data class QuovaFile(
             append(it)
             nl()
         }
+    }
+
+    companion object {
+        const val standardImports = """import kotlin.Byte as `Byte-`
+import kotlin.UByte as `UByte-`
+import kotlin.Short as `Short-`
+import kotlin.UShort as `UShort-`
+        """
     }
 }
 
@@ -222,7 +229,7 @@ data class PrimitiveEnumDeclaration(
                     else
                         append(entry.value.value)
                     lastExpression = entry.value.value
-                    count = 0
+                    count = 1
                 } else {
                     val value = OperatorExpression.Sum(
                         lastExpression,
@@ -338,8 +345,8 @@ data class FunctionDeclaration(
             append(it)
             append(' ')
         }
-        if (inheritance != InheritanceModifier.FINAL)
-            append("open ")
+        /*if (inheritance != InheritanceModifier.FINAL)
+            append("open ")*/ //TODO: Allow
         modifiers.forEach {
             if (it != FunctionModifier.STRICTFP && it != FunctionModifier.STATIC && it != FunctionModifier.SYNCHRONIZED) {
                 append(it)
@@ -350,8 +357,7 @@ data class FunctionDeclaration(
         if (typeParameters.isNotEmpty())
             typeParameters.joinTo(this, prefix = "<", postfix = "> ")
         append(name)
-        if (parameters.isNotEmpty())
-            parameters.joinTo(this, prefix = "(", postfix = ")")
+        parameters.joinTo(this, prefix = "(", postfix = ")")
         type?.let {
             append(": ")
             append(it)
@@ -691,7 +697,11 @@ data class Assignment(
     val right: Expression,
     val operator: AssignmentOperator
 ) : Statement {
-    override fun toString(): String = "$left $operator $right"
+    override fun toString(): String =
+        if (operator.nonNative)
+            "$left = $left $operator $right"
+        else
+            "$left $operator $right"
 }
 
 data class IfStatement(
@@ -852,11 +862,13 @@ object PASS : StatementBody {
 interface Expression : Statement, SimpleStatement {
     val priority: Int
 
-    fun surroundIfHigher(other: Expression): String = if (other.priority > priority) "($other)" else other.toString()
+    fun surroundIfHigher(other: Expression): String = (if (other.priority > priority) "($other)" else other.toString())/*.also {
+        println("_DEBUG: ${this::class} §$priority ~|~ ${other::class} §${other.priority} '>>> $it")
+    }*/
 }
 // :-> PrimaryExpression, OperatorExpression, ListComprehension
 
-class Priority(override val priority: Int) : Expression
+open class Priority(override val priority: Int) : Expression
 
 data class Block(
     val statements: List<Statement>
@@ -864,15 +876,11 @@ data class Block(
     override fun toString(): String = statements.joinToString("\n", "{\n", "\n}")
 }
 
-sealed class OperatorExpression(priority: Int) : Expression by Priority(priority) {
-    companion object {
-        var counter = -1
-    }
-
+sealed class OperatorExpression(priority: Int) : Priority(priority) {
     data class Postfix(
         val value: Expression,
         val postfix: Postfix
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(0) {
         interface Postfix
 
         enum class Operator(val string: String) : Postfix {
@@ -921,7 +929,7 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     data class Prefix(
         val operator: Operator,
         val value: Expression
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(1) {
         enum class Operator(val string: String, val after: String = "") {
             PLUS("+"), MINUS("-"), INCR("++"), DECR("--"), NOT("!"),
             COMP("quova.internal.bitComplement(", ")"), REF("::");
@@ -932,13 +940,13 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         override fun toString(): String = "$operator${surroundIfHigher(value)}${operator.after}"
     }
 
-    data class Sum(
+    data class Product(
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(2) {
         enum class Operator(val string: String) {
-            PLUS("+"), MINUS("-");
+            TIMES("*"), DIV("/"), REM("%");
 
             override fun toString(): String = string
         }
@@ -946,13 +954,13 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
 
-    data class Product(
+    data class Sum(
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(3) {
         enum class Operator(val string: String) {
-            TIMES("*"), DIV("/"), REM("%");
+            PLUS("+"), MINUS("-");
 
             override fun toString(): String = string
         }
@@ -963,22 +971,22 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     data class Range(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left..$right"
+    ) : OperatorExpression(4) {
+        override fun toString(): String = "${surroundIfHigher(left)}..${surroundIfHigher(right)}"
     }
 
     data class Elvis(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left ?: $right"
+    ) : OperatorExpression(5) {
+        override fun toString(): String = "${surroundIfHigher(left)} ?: ${surroundIfHigher(right)}"
     }
 
     data class NamedCheck(
         val left: Expression,
         val right: Expression,
         val operator: Either<InOperator, InstanceOperator>
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(6) {
         override fun toString(): String = "${surroundIfHigher(left)} $operator ${surroundIfHigher(right)}"
     }
 
@@ -986,15 +994,15 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         val type: Type,
         val safe: Boolean,
         val value: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$value ${if (safe) "as?" else "as"} $type"
+    ) : OperatorExpression(7) {
+        override fun toString(): String = "${surroundIfHigher(value)} ${if (safe) "as?" else "as"} $type"
     }
 
     data class Shift(
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(8) {
         enum class Operator(val string: String) {
             LEFT("shl"), RIGHT("shr"), U_RIGHT("ushr");
 
@@ -1007,36 +1015,36 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     data class BitAnd(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left and $right"
+    ) : OperatorExpression(9) {
+        override fun toString(): String = "${surroundIfHigher(left)} and ${surroundIfHigher(right)}"
     }
 
     data class BitXor(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left xor $right"
+    ) : OperatorExpression(10) {
+        override fun toString(): String = "${surroundIfHigher(left)} xor ${surroundIfHigher(right)}"
     }
 
     data class BitOr(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left or $right"
+    ) : OperatorExpression(11) {
+        override fun toString(): String = "${surroundIfHigher(left)} or ${surroundIfHigher(right)}"
     }
 
     data class Spaceship(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left.compareTo($right)"
+    ) : OperatorExpression(12) {
+        override fun toString(): String = "${surroundIfHigher(left)}.compareTo($right)"
     }
 
     data class Comparison(
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(13) {
         enum class Operator(val string: String) {
             LT("<"), GT(">"), LE("<="), GE(">=");
 
@@ -1050,7 +1058,7 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(14) {
         enum class Operator(val string: String) {
             EQ("=="), NOT_EQ("!="), IDENTITY("==="), NOT_IDENTITY("!==");
 
@@ -1063,36 +1071,36 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     data class Conjunction(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left && $right"
+    ) : OperatorExpression(15) {
+        override fun toString(): String = "${surroundIfHigher(left)} && ${surroundIfHigher(right)}"
     }
 
     data class Disjunction(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "$left || $right"
+    ) : OperatorExpression(16) {
+        override fun toString(): String = "${surroundIfHigher(left)} || ${surroundIfHigher(right)}"
     }
 
     data class Ternary(
         val condition: Expression,
         val ifTrue: Expression,
         val ifFalse: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "if ($condition) $ifTrue else $ifFalse"
+    ) : OperatorExpression(17) {
+        override fun toString(): String = "if ($condition) ${surroundIfHigher(ifTrue)} else ${surroundIfHigher(ifFalse)}"
     }
 
     data class Spread(
         val value: Expression
-    ) : OperatorExpression(++counter) {
-        override fun toString(): String = "*$value"
+    ) : OperatorExpression(18) {
+        override fun toString(): String = "*${surroundIfHigher(value)}"
     }
 
     data class Assignment(
         val left: Expression,
         val right: Expression,
         val operator: AssignmentOperator
-    ) : OperatorExpression(++counter) {
+    ) : OperatorExpression(19) {
         override fun toString(): String = if (operator.nonNative)
             "($left $operator $right).also { `av-` -> $left = `av-` }"
         else
@@ -1100,14 +1108,14 @@ sealed class OperatorExpression(priority: Int) : Expression by Priority(priority
     }
 }
 
-open class PrimaryExpression : Expression by Priority(-1)
+open class PrimaryExpression : Priority(-1)
 // :-> Expression, ConstructorInvocation, Literal, Identifier
 
 data class ListComprehension(
     val mapping: Expression,
     val forEach: ForStatement.ForEachCondition,
     val ifCondition: Expression?
-) : Expression by Priority(++OperatorExpression.counter) {
+) : Priority(20) {
     override fun toString(): String = buildString {
         append(forEach.inValue)
         val lambdaParameter = buildString {
@@ -1441,6 +1449,7 @@ data class Annotation(
     val valueArguments: List<ValueArgument>
 ) {
     override fun toString(): String = buildString {
+        append('@')
         append(name)
         if (typeArguments.isNotEmpty())
             typeArguments.joinTo(this, prefix = "<", postfix = ">")

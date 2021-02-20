@@ -44,7 +44,7 @@ readonly String lazyInitialized <- lazy(() -> {
 
 // Type variance
 
-class WithOutParameter <in P> { // Declaration site
+class WithInParameter <in P> { // Declaration site
     Collection<out CharSequence> doSomething() { // Use site (same as "? extends String")
         String cs = "Foo";
         return listOf(cs);
@@ -84,7 +84,7 @@ String? a = null; // "String a = null" doesn't compile
 int? nullableInt = null; // nullable primitives
 
 var l = a?.length; // Safe call operator
-String aOrEmpty { get() => a ?: ""; }; // Elvis operator
+readonly String aOrEmpty { get() => a ?: ""; }; // Elvis operator
 var aNotNull = a!!; // Null assertion
 
 //private String! flexible; // ONLY private properties can be null flexible (init to null)
@@ -114,7 +114,7 @@ record Point(int x, int y) {
 // Type interference in initializers
 
 var array = { 1, 2, 3 }; // same as new int[] ...
-List<int> list = { 1, 2, 3 }; // same as new List ...
+//TODO: List<int> list = { 1, 2, 3 }; // same as new List ...
 //TODO: HashMap<String, int> map = { "1" : 1 , "2" : 2 } // same as new HashMap ...
 
 

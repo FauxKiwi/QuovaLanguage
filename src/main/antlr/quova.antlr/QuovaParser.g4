@@ -225,7 +225,7 @@ setterParameter
 
 statement
     : labeledStatement
-    | assignment
+    | assignment SEMI
     | ifStatement
     | switchExpression
     | loopStatement
@@ -327,7 +327,7 @@ operatorExpression
     | operatorExpression DISJ operatorExpression #disjunction
     | <assoc=right> operatorExpression QUEST expression COLON expression #ternary
     | ELLIPSIS operatorExpression #spread
-    | operatorExpression assignmentOperator operatorExpression #assign
+    | <assoc=right> operatorExpression assignmentOperator operatorExpression #assign
     | primaryExpression #primary
     ;
 
@@ -421,7 +421,7 @@ superLiteral
     ;
 
 lambda
-    : (lambdaParameter | LPAREN (lambdaParameter (COMMA lambdaParameter)*)? RPAREN) ARROW (expression | lambdaBody)
+    : (lambdaParameter | LPAREN (lambdaParameter (COMMA lambdaParameter)*)? RPAREN) ARROW (lambdaBody | expression)
     ;
 
 lambdaParameter
@@ -586,7 +586,6 @@ simpleIdentifier
     | ENUM
     | RECORD
     | TYPEDEF
-    | VAR
     | DEF
     | AS
     | BITFIELD

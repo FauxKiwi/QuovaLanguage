@@ -19,7 +19,7 @@ class QuovaCompiler(val src: String) {
         QuovaFile(
             ctx.ShebangLine()?.text,
             ctx.identifier()?.text,
-            ctx.importHeader().map { visit(it) } + Import("quova", true, listOf(), null),
+            ctx.importHeader().map { visit(it) }/* + Import("quova", true, listOf(), null)*/,
             run {
                 val list = mutableListOf<Declaration>()
                 ctx.declaration().forEach { declaration ->
@@ -409,9 +409,9 @@ class QuovaCompiler(val src: String) {
             visit(ctx.operatorExpression()),
             ctx.INCR()?.let { OperatorExpression.Postfix.Operator.INCR } ?:
             ctx.DECR()?.let { OperatorExpression.Postfix.Operator.DECR } ?:
-            ctx.BANG()?.let { OperatorExpression.Postfix.Operator.NOT_NULL } ?:
+            ctx.BANG(0)?.let { OperatorExpression.Postfix.Operator.NOT_NULL } ?:
             ctx.valueArguments()?.let { OperatorExpression.Postfix.Invocation(
-                ctx.typeArguments().typeArgument().map { ta -> visit(ta) },
+                ctx.typeArguments()?.typeArgument()?.map { ta -> visit(ta) } ?: listOf(),
                 it.valueArgument().map { va -> visit(va) }
             ) } ?:
             ctx.indexingSuffix()?.let { OperatorExpression.Postfix.Indexing(

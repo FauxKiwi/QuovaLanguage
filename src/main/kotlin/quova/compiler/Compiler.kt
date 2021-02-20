@@ -39,6 +39,7 @@ object Compiler {
         val quovaSources = File("$rootDir\\src\\main\\quova\\")
         val compiledSources = File("$rootDir\\build\\src\\main\\kotlin\\")
         compiledSources.mkdirs()
+        compiledSources.listFiles()?.forEach { it.delete() }
 
         visitWithAllChildren(quovaSources, {
             println("Compiling file ${it.name}") // (@ ${it.absolutePath}) ...
@@ -56,7 +57,7 @@ object Compiler {
             compiledFile.createNewFile()
 
             FileWriter(compiledFile).use { writer ->
-                writer.write(/*quovaToKt(it.nameWithoutExtension, quovaSrc)*/QuovaCompiler(quovaSrc).compile().toString())
+                writer.write("@file:JvmName(\"${it.nameWithoutExtension}Qv\")\n${QuovaCompiler(quovaSrc).compile()}")
             }
 
             println("... Done") // (@ ${compiledFile.absolutePath})
