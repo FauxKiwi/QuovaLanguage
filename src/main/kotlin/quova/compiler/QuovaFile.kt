@@ -233,7 +233,7 @@ data class PrimitiveEnumDeclaration(
     override val staticMembers: List<Nothing> = listOf()
 ) : TypeDeclaration.Type {
     enum class Type(val string: String) {
-        BYTE("UByte"), SBYTE("Byte"), SHORT("Short"), USHORT("UShort"), INT("Int"),
+        BYTE("UByte"), SBYTE("Byte"), SHORT("Short"), USHORT("UShort"), INT("Integer"),
         UINT("UInt"), LONG("Long"), ULONG("ULong");
 
         override fun toString(): String = string

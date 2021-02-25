@@ -39,15 +39,15 @@ class QuovaCompiler(val src: String) {
             ctx.AS()?.let { ctx.simpleIdentifier().takeUnless { it.isEmpty() }?.get(0) }?.text
         )
 
-    private fun visit(ctx: QuovaParser.DeclarationContext, local: Boolean = false): Declaration? =
-        ctx.typeDeclaration()?.let { visit(it, local) } ?:
-        ctx.functionDeclaration()?.let { visit(it, local) } ?:
-        ctx.propertyDeclaration()?.let { visit(it, local) }
+    private fun visit(ctx: QuovaParser.DeclarationContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL): Declaration? =
+        ctx.typeDeclaration()?.let { visit(it, local, standardVisibility) } ?:
+        ctx.functionDeclaration()?.let { visit(it, local, standardVisibility) } ?:
+        ctx.propertyDeclaration()?.let { visit(it, local, standardVisibility) }
 
-    private fun visit(ctx: QuovaParser.TypeDeclarationContext, local: Boolean = false): TypeDeclaration =
+    private fun visit(ctx: QuovaParser.TypeDeclarationContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL): TypeDeclaration =
         TypeDeclaration(
             ctx.annotation().map { visit(it) },
-            visit(ctx.visibilityModifier(), local),
+            visit(ctx.visibilityModifier(), local, standardVisibility),
             ctx.classDeclaration()?.let { visit(it) } ?:
             ctx.singletonDeclaration()?.let { visit(it) } ?:
             ctx.interfaceDeclaration()?.let { visit(it) } ?:
@@ -89,7 +89,7 @@ class QuovaCompiler(val src: String) {
         )
 
     private fun visit(ctx: QuovaParser.InterfaceDeclarationContext): InterfaceDeclaration = run {
-        val allMembers = ctx.interfaceBody()?.declaration()?.mapNotNull { visit(it) } ?: listOf()
+        val allMembers = ctx.interfaceBody()?.declaration()?.mapNotNull { visit(it, standardVisibility = VisibilityModifier.PUBLIC) } ?: listOf()
         val members = mutableListOf<Declaration>()
         val staticMembers = mutableListOf<Declaration>()
         allMembers.forEach {
@@ -191,8 +191,8 @@ class QuovaCompiler(val src: String) {
         )
     }
 
-    private fun visit(ctx: QuovaParser.FunctionDeclarationContext, local: Boolean = false): FunctionDeclaration = run {
-        val functionModifiers = visit(ctx.functionModifiers(), local)
+    private fun visit(ctx: QuovaParser.FunctionDeclarationContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL): FunctionDeclaration = run {
+        val functionModifiers = visit(ctx.functionModifiers(), local, standardVisibility)
         FunctionDeclaration(
             ctx.annotation().map { visit(it) },
             functionModifiers.visibility,
@@ -207,8 +207,8 @@ class QuovaCompiler(val src: String) {
         )
     }
 
-    private fun visit(ctx: QuovaParser.PropertyDeclarationContext, local: Boolean = false): PropertyDeclaration = run {
-        val propertyModifiers = visit(ctx.propertyModifiers(), local)
+    private fun visit(ctx: QuovaParser.PropertyDeclarationContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL): PropertyDeclaration = run {
+        val propertyModifiers = visit(ctx.propertyModifiers(), local, standardVisibility)
         PropertyDeclaration(
             ctx.annotation().map { visit(it) },
             propertyModifiers.visibility,
@@ -328,7 +328,7 @@ class QuovaCompiler(val src: String) {
 
     private fun visit(ctx: QuovaParser.TypeArgumentContext): TypeArgument =
         TypeArgument(
-            ctx.QUEST().bool(),
+            !ctx.QUEST().bool(),
             ctx.varianceModifier()?.let { visit(it) },
             ctx.type()?.let { visit(it) }
         )
@@ -856,7 +856,7 @@ class QuovaCompiler(val src: String) {
             } ?: listOf()
         )
 
-    private fun visit(ctx: QuovaParser.FunctionModifiersContext, local: Boolean = false) = run {
+    private fun visit(ctx: QuovaParser.FunctionModifiersContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL) = run {
         data class FunctionModifiers(
             val visibility: VisibilityModifier,
             val inheritance: InheritanceModifier?,
@@ -874,17 +874,17 @@ class QuovaCompiler(val src: String) {
         ctx.NATIVE().takeIf { it.size == 1 }?.let { modifiers.add(FunctionModifier.NATIVE) }
 
         FunctionModifiers(
-            visit(ctx.visibilityModifier(), local),
+            visit(ctx.visibilityModifier(), local, standardVisibility),
             ctx.inheritanceModifier()?.let { visit(it) },
             modifiers
         )
     }
 
-    private fun visit(ctx: QuovaParser.VisibilityModifierContext?, local: Boolean = false): VisibilityModifier =
+    private fun visit(ctx: QuovaParser.VisibilityModifierContext?, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL): VisibilityModifier =
         ctx?.PUBLIC()?.let { VisibilityModifier.PUBLIC } ?:
         ctx?.PRIVATE()?.let { VisibilityModifier.PRIVATE } ?:
         ctx?.PROTECTED()?.let { VisibilityModifier.PROTECTED } ?:
-        if (local && ctx == null) VisibilityModifier.LOCAL else VisibilityModifier.INTERNAL
+        if (local && ctx == null) VisibilityModifier.LOCAL else standardVisibility
 
     private fun visit(ctx: QuovaParser.InheritanceModifierContext): InheritanceModifier =
         ctx.FINAL()?.let { InheritanceModifier.FINAL } ?:
@@ -895,7 +895,7 @@ class QuovaCompiler(val src: String) {
         VarianceModifier.OUT
 
 
-    private fun visit(ctx: QuovaParser.PropertyModifiersContext, local: Boolean = false) = run {
+    private fun visit(ctx: QuovaParser.PropertyModifiersContext, local: Boolean = false, standardVisibility: VisibilityModifier = VisibilityModifier.INTERNAL) = run {
         data class PropertyModifiers(
             val visibility: VisibilityModifier,
             val inheritance: InheritanceModifier?,
@@ -910,7 +910,7 @@ class QuovaCompiler(val src: String) {
         ctx.TRANSIENT().takeIf { it.size == 1 }?.let { modifiers.add(PropertyModifier.TRANSIENT) }
 
         PropertyModifiers(
-            visit(ctx.visibilityModifier(), local),
+            visit(ctx.visibilityModifier(), local, standardVisibility),
             ctx.inheritanceModifier()?.let { visit(it) },
             modifiers
         )
