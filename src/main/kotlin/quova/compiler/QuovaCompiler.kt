@@ -39,15 +39,15 @@ class QuovaCompiler(val src: String) {
             ctx.AS()?.let { ctx.simpleIdentifier().takeUnless { it.isEmpty() }?.get(0) }?.text
         )
 
-    private fun visit(ctx: QuovaParser.DeclarationContext): Declaration? =
-        ctx.typeDeclaration()?.let { visit(it) } ?:
-        ctx.functionDeclaration()?.let { visit(it) } ?:
-        ctx.propertyDeclaration()?.let { visit(it) }
+    private fun visit(ctx: QuovaParser.DeclarationContext, local: Boolean = false): Declaration? =
+        ctx.typeDeclaration()?.let { visit(it, local) } ?:
+        ctx.functionDeclaration()?.let { visit(it, local) } ?:
+        ctx.propertyDeclaration()?.let { visit(it, local) }
 
-    private fun visit(ctx: QuovaParser.TypeDeclarationContext): TypeDeclaration =
+    private fun visit(ctx: QuovaParser.TypeDeclarationContext, local: Boolean = false): TypeDeclaration =
         TypeDeclaration(
             ctx.annotation().map { visit(it) },
-            visit(ctx.visibilityModifier()),
+            visit(ctx.visibilityModifier(), local),
             ctx.classDeclaration()?.let { visit(it) } ?:
             ctx.singletonDeclaration()?.let { visit(it) } ?:
             ctx.interfaceDeclaration()?.let { visit(it) } ?:
@@ -125,8 +125,8 @@ class QuovaCompiler(val src: String) {
             ctx.annotationMembers().classMember().mapNotNull { visit(it) }
         )
 
-    private fun visit(ctx: QuovaParser.FunctionDeclarationContext): FunctionDeclaration = run {
-        val functionModifiers = visit(ctx.functionModifiers())
+    private fun visit(ctx: QuovaParser.FunctionDeclarationContext, local: Boolean = false): FunctionDeclaration = run {
+        val functionModifiers = visit(ctx.functionModifiers(), local)
         FunctionDeclaration(
             ctx.annotation().map { visit(it) },
             functionModifiers.visibility,
@@ -141,8 +141,8 @@ class QuovaCompiler(val src: String) {
         )
     }
 
-    private fun visit(ctx: QuovaParser.PropertyDeclarationContext): PropertyDeclaration = run {
-        val propertyModifiers = visit(ctx.propertyModifiers())
+    private fun visit(ctx: QuovaParser.PropertyDeclarationContext, local: Boolean = false): PropertyDeclaration = run {
+        val propertyModifiers = visit(ctx.propertyModifiers(), local)
         PropertyDeclaration(
             ctx.annotation().map { visit(it) },
             propertyModifiers.visibility,
@@ -308,7 +308,7 @@ class QuovaCompiler(val src: String) {
         } ?:
         ctx.jumpStatement()?.let { visit(it) } ?:
         ctx.block()?.let { visit(it) } ?:
-        ctx.declaration()?.let { visit(it) } ?:
+        ctx.declaration()?.let { visit(it, true) } ?:
         ctx.expression()?.let { visit(ctx.expression()) }
 
     private fun visit(ctx: QuovaParser.SimpleStatementContext): SimpleStatement =
@@ -412,10 +412,7 @@ class QuovaCompiler(val src: String) {
             ctx.INCR()?.let { OperatorExpression.Postfix.Operator.INCR } ?:
             ctx.DECR()?.let { OperatorExpression.Postfix.Operator.DECR } ?:
             ctx.BANG(0)?.let { OperatorExpression.Postfix.Operator.NOT_NULL } ?:
-            ctx.valueArguments()?.let { OperatorExpression.Postfix.Invocation(
-                ctx.typeArguments()?.typeArgument()?.map { ta -> visit(ta) } ?: listOf(),
-                it.valueArgument().map { va -> visit(va) }
-            ) } ?:
+            ctx.invocationSuffix()?.let { visit(it) } ?:
             ctx.indexingSuffix()?.let { OperatorExpression.Postfix.Indexing(
                 it.expression().map { ex -> visit(ex) }
             ) } ?:
@@ -525,6 +522,14 @@ class QuovaCompiler(val src: String) {
         else -> visit((ctx as QuovaParser.PrimaryContext).primaryExpression())
     }
 
+    private fun visit(ctx: QuovaParser.InvocationSuffixContext): OperatorExpression.Postfix.Invocation =
+        OperatorExpression.Postfix.Invocation(
+            ctx.typeArguments()?.typeArgument()?.map { visit(it) } ?: listOf(),
+            ctx.valueArguments()?.let { va -> va.valueArgument().map { visit(it)} } ?:
+            ctx.lambda()?.let { listOf(ValueArgument(null, visit(it))) } ?:
+            listOf(ValueArgument(null, Lambda(listOf(), Either.B(visit(ctx.lambdaBody())))))
+        )
+
     private fun visit(ctx: QuovaParser.CallSuffixContext): OperatorExpression.Postfix.Call =
         ctx.CLASS()?.let { OperatorExpression.Postfix.Call(
             OperatorExpression.Postfix.Call.Operator.REF,
@@ -558,7 +563,10 @@ class QuovaCompiler(val src: String) {
         ConstructorInvocation(
             visit(ctx.userType()),
             ctx.typeArguments()?.typeArgument()?.map { visit(it) } ?: listOf(),
-            Either(ctx.valueArguments()?.valueArgument()?.map { visit(it) }, ctx.initializerList()?.let { visit(it) })
+            Either(
+                ctx.valueArguments()?.valueArgument()?.map { visit(it) },
+                ctx.initializerList()?.let { visit(it, ctx.userType()) }
+            )
         )
 
     private fun visit(ctx: QuovaParser.SwitchExpressionContext): Switch =
@@ -650,7 +658,7 @@ class QuovaCompiler(val src: String) {
             ctx.expression()?.let { visit(it) }
         )
 
-    private fun visit(ctx: QuovaParser.InitializerListContext): InitializerList =
+    private fun visit(ctx: QuovaParser.InitializerListContext, userType: QuovaParser.UserTypeContext? = null): InitializerList =
         InitializerList(
             ctx.dictionaryInitializer()?.let { di ->
                 Either(
@@ -660,7 +668,8 @@ class QuovaCompiler(val src: String) {
             } ?:
             Either(
                 ctx.valueArgument().map { visit(it) }, null
-            )
+            ),
+            userType?.let { visit(it) }
         )
 
     private fun visit(ctx: QuovaParser.AssignmentOperatorContext): AssignmentOperator =
@@ -748,7 +757,7 @@ class QuovaCompiler(val src: String) {
             ctx.valueArguments()?.valueArgument()?.map { visit(it) } ?: listOf()
         )
 
-    private fun visit(ctx: QuovaParser.FunctionModifiersContext) = run {
+    private fun visit(ctx: QuovaParser.FunctionModifiersContext, local: Boolean = false) = run {
         data class FunctionModifiers(
             val visibility: VisibilityModifier,
             val inheritance: InheritanceModifier?,
@@ -766,17 +775,17 @@ class QuovaCompiler(val src: String) {
         ctx.NATIVE().takeIf { it.size == 1 }?.let { modifiers.add(FunctionModifier.NATIVE) }
 
         FunctionModifiers(
-            visit(ctx.visibilityModifier()),
+            visit(ctx.visibilityModifier(), local),
             ctx.inheritanceModifier()?.let { visit(it) },
             modifiers
         )
     }
 
-    private fun visit(ctx: QuovaParser.VisibilityModifierContext?): VisibilityModifier =
+    private fun visit(ctx: QuovaParser.VisibilityModifierContext?, local: Boolean = false): VisibilityModifier =
         ctx?.PUBLIC()?.let { VisibilityModifier.PUBLIC } ?:
         ctx?.PRIVATE()?.let { VisibilityModifier.PRIVATE } ?:
-        ctx?.PROTECTED()?.let { VisibilityModifier.INTERNAL } ?:
-        VisibilityModifier.INTERNAL
+        ctx?.PROTECTED()?.let { VisibilityModifier.PROTECTED } ?:
+        if (local && ctx == null) VisibilityModifier.LOCAL else VisibilityModifier.INTERNAL
 
     private fun visit(ctx: QuovaParser.InheritanceModifierContext): InheritanceModifier =
         ctx.FINAL()?.let { InheritanceModifier.FINAL } ?:
@@ -787,7 +796,7 @@ class QuovaCompiler(val src: String) {
         VarianceModifier.OUT
 
 
-    private fun visit(ctx: QuovaParser.PropertyModifiersContext) = run {
+    private fun visit(ctx: QuovaParser.PropertyModifiersContext, local: Boolean = false) = run {
         data class PropertyModifiers(
             val visibility: VisibilityModifier,
             val inheritance: InheritanceModifier?,
@@ -802,7 +811,7 @@ class QuovaCompiler(val src: String) {
         ctx.TRANSIENT().takeIf { it.size == 1 }?.let { modifiers.add(PropertyModifier.TRANSIENT) }
 
         PropertyModifiers(
-            visit(ctx.visibilityModifier()),
+            visit(ctx.visibilityModifier(), local),
             ctx.inheritanceModifier()?.let { visit(it) },
             modifiers
         )

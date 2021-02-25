@@ -79,7 +79,6 @@ data class TypeDeclaration(
         annotations.joinTo(this, " ")
         if (annotations.isNotEmpty()) nl()
         append(visibility)
-        append(' ')
         append(type)
     }
 }
@@ -333,7 +332,6 @@ data class FunctionDeclaration(
         if (annotations.isNotEmpty())
             annotations.joinTo(this, " ", postfix = "\n")
         append(visibility)
-        append(' ')
         var override = false
         annotations.forEach {
             if (it.name == "Override")
@@ -389,7 +387,6 @@ data class PropertyDeclaration(
             if (annotations.isNotEmpty())
                 annotations.joinTo(this, " ", postfix = "\n")
             append(visibility)
-            append(' ')
             inheritance?.let {
                 append(it)
                 append(' ')
@@ -763,20 +760,19 @@ data class ForStatement(
 
     override fun toString(): String = condition.either({
         buildString {
-            append("run {")
+            append("run {\n")
             it.variables.forEach {
                 append(it)
                 nl()
             }
             append("while (")
-            if (it.expressions.size <= 1)
-                it.expressions.forEach {
-                    append(it)
-                }
-            else
-                it.expressions.joinTo(this, "&&") { ex ->
+            when (it.expressions.size) {
+                1 -> append(it.expressions[0])
+                0 -> append("true")
+                else -> it.expressions.joinTo(this, "&&") { ex ->
                     "($ex)"
                 }
+            }
             append(") {\n")
             when (body) {
                 is Block -> {
@@ -787,6 +783,7 @@ data class ForStatement(
                 }
                 is Statement -> {
                     append(body)
+                    nl()
                 }
             }
             it.statements.forEach { st ->
@@ -1328,17 +1325,26 @@ data class Lambda(
 }
 
 data class InitializerList(
-    val arguments: Either<List<ValueArgument>, List<Pair<Expression, Expression>>> // Normal <-> Dictionary
+    val arguments: Either<List<ValueArgument>, List<Pair<Expression, Expression>>>, // Normal <-> Dictionary
+    val userType: UserType?
 ) : Literal() {
     override fun toString(): String = buildString {
-        //TODO: Constructors etc.
-        arguments.either({
-            it.joinTo(this, prefix = "quova.internal.fittingArray(", postfix = ")")
-        }, {
-            it.joinTo(this, prefix = "hashMapOf(", postfix = ")") { pair ->
-                "${pair.first} to ${pair.second}"
-            }
-        })
+        if (userType == null)
+            arguments.either({
+                it.joinTo(this, prefix = "quova.internal.fittingArray(", postfix = ")")
+            }, {
+                it.joinTo(this, prefix = "hashMapOf(", postfix = ")") { pair ->
+                    "${pair.first} to ${pair.second}"
+                }
+            })
+        else
+            arguments.either({
+                it.joinTo(this, prefix = "$userType(", postfix = ")")
+            }, {
+                it.joinTo(this, prefix = "$userType(", postfix = ")") { pair ->
+                    "${pair.first} to ${pair.second}"
+                }
+            })
     }
 }
 
@@ -1408,7 +1414,7 @@ data class PrimitiveType(
     val array: Boolean
 ) : TypeReference {
     enum class Type(val string: String) {
-        BYTE("UByte"), SBYTE("Byte"), SHORT("Short"), USHORT("UShort"), INT("Int"),
+        BYTE("UByte"), SBYTE("Byte"), SHORT("Short"), USHORT("UShort"), INT("Integer"),
         UINT("UInt"), LONG("Long"), ULONG("ULong"), FLOAT("Float"), DOUBLE("Double"),
         CHAR("Char"), BOOLEAN("Boolean");
 
@@ -1469,8 +1475,8 @@ enum class FunctionModifier(val string: String = "null") {
     override fun toString(): String = string
 }
 
-enum class VisibilityModifier(val string: String) {
-    PUBLIC("public"), PRIVATE("private"), INTERNAL("internal"), PROTECTED("protected");
+enum class VisibilityModifier(val string: String = "") {
+    PUBLIC("public "), PRIVATE("private "), INTERNAL("internal "), PROTECTED("protected "), LOCAL;
 
     override fun toString(): String = string
 }

@@ -7,8 +7,8 @@ import java.io.FileWriter
 import java.nio.file.Files
 
 object Compiler {
-    fun compile(module: File) {
-        if (!module.exists()) error("This module file doesn't exist")
+    fun compile(bins: File = File("").absoluteFile, module: File) {
+        if (!module.exists()) error("This module file doesn't exist: ${module.path}")
         if (module.isDirectory) error("This is a directory")
 
         val startTimestamp = System.currentTimeMillis()
@@ -19,17 +19,17 @@ object Compiler {
         moduleReader.close()
         println("... Done")
 
-        val rootDir = module.parentFile.absolutePath
+        val rootDir = module.absoluteFile.parentFile.absolutePath
 
         File("$rootDir\\build\\").mkdir()
 
         println("Checking gradle installation ...")
-        copyGradleWrapperFiles(rootDir)
+        copyGradleWrapperFiles(bins.parent, rootDir)
         println("... Done")
 
         val gradleScript = File("$rootDir\\build\\build.gradle")
         FileWriter(gradleScript).use { writer ->
-            writer.write(quovaModule.gradleBuild())
+            writer.write(quovaModule.gradleBuild(File("${bins.parent}\\lib\\")))
         }
         val gradleSettings = File("$rootDir\\build\\settings.gradle")
         FileWriter(gradleSettings).use { writer ->
@@ -65,7 +65,7 @@ object Compiler {
 
         println("Building classes ...")
 
-        system("gradlew compileKotlin", "./gradlew compileKotlin", "$rootDir\\build\\", redirectInput = false, redirectOutput = false)
+        system("gradlew compileKotlin", "./gradlew compileKotlin", "$rootDir\\build\\"/*, redirectInput = false, redirectOutput = false*/)
 
         println("... Done")
 
@@ -94,25 +94,31 @@ object Compiler {
         }
     }
 
-    private fun copyGradleWrapperFiles(rootDir: String) {
+    private fun copyGradleWrapperFiles(quovaDir: String, rootDir: String) {
         val gradleFolder = File("$rootDir\\build\\gradle\\wrapper\\")
         if (!gradleFolder.exists())
             gradleFolder.mkdirs()
         val wrapperJar = File("$rootDir\\build\\gradle\\wrapper\\gradle-wrapper.jar")
         if (!wrapperJar.exists())
-            Files.copy(File("D:\\IdeaProjects\\Quova\\gradleRuntime\\gradle-wrapper.jar").toPath(),
+            Files.copy(File("$quovaDir\\ext\\gradleRuntime\\gradle-wrapper.jar").toPath(),
                 wrapperJar.toPath()).also { println("Copied Gradle wrapper jar") }
         val wrapperProperties = File("$rootDir\\build\\gradle\\wrapper\\gradle-wrapper.properties")
         if (!wrapperProperties.exists())
-            Files.copy(File("D:\\IdeaProjects\\Quova\\gradleRuntime\\gradle-wrapper.properties").toPath(),
+            Files.copy(File("$quovaDir\\ext\\gradleRuntime\\gradle-wrapper.properties").toPath(),
                 wrapperProperties.toPath()).also { println("Copied Gradle wrapper properties") }
         val gradlewBatch = File("$rootDir\\build\\gradlew.bat")
         if (!gradlewBatch.exists())
-            Files.copy(File("D:\\IdeaProjects\\Quova\\gradleRuntime\\gradlew.bat").toPath(),
+            Files.copy(File("$quovaDir\\ext\\gradleRuntime\\gradlew.bat").toPath(),
                 gradlewBatch.toPath()).also { println("Copied Gradle wrapper batch") }
         val gradlewUnix = File("$rootDir\\build\\gradlew")
         if (!gradlewUnix.exists())
-            Files.copy(File("D:\\IdeaProjects\\Quova\\gradleRuntime\\gradlew").toPath(),
+            Files.copy(File("$quovaDir\\ext\\gradleRuntime\\gradlew").toPath(),
                 gradlewUnix.toPath()).also { println("Copied Gradle wrapper unix runnable") }
     }
+}
+
+fun main(args: Array<String>) {
+    val quovaBinDir = File(args[0]).absoluteFile
+    val moduleFile = File(args[1]).absoluteFile
+    Compiler.compile(quovaBinDir, moduleFile)
 }

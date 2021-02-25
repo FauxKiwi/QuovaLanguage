@@ -1,5 +1,7 @@
 package quova.compiler
 
+import java.io.File
+
 data class QuovaModule(
     val project: String,
     val group: String,
@@ -45,7 +47,7 @@ data class QuovaModule(
         }
     }
 
-    fun gradleBuild(): String = buildString {
+    fun gradleBuild(libs: File): String = buildString {
         append("""
             plugins {
                 id 'org.jetbrains.kotlin.jvm' version '1.4.10'
@@ -60,7 +62,7 @@ data class QuovaModule(
             this, "\n\t", "ext {\n\t", "\n}\n\n"
         )
         buildContext.repositories.joinTo(
-            this, "\n\t", "repositories {\n\tflatDir {\n\t\tdirs 'D:\\\\IdeaProjects\\\\Quova\\\\stdlib\\\\build\\\\libs'\n\t}\n\t", "\n}\n\n"
+            this, "\n\t", "repositories {\n\tflatDir {\n\t\tdirs '${libs.path.replace("\\", "\\\\")}'\n\t}\n\t", "\n}\n\n"
         ) { "$it()" }
         append("dependencies {\n\timplementation name: 'stdlib-1.0-SNAPSHOT'")
         buildContext.dependencies.forEach {

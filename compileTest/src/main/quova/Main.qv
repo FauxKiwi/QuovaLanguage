@@ -1,8 +1,3 @@
-from java.io import File, FileReader, FileWriter;
-
 public void main() {
-    new AnotherClass().saySomething();
-    println(array.contentToString());
+    println(~0);
 }
-
-var array = { 1, 4, 9 };

@@ -308,7 +308,7 @@ block
     ;
 
 operatorExpression
-    : operatorExpression (INCR | DECR | BANG BANG | (typeArguments? valueArguments) | indexingSuffix | callSuffix) #postfix
+    : operatorExpression (INCR | DECR | BANG BANG | invocationSuffix | indexingSuffix | callSuffix) #postfix
     | (PLUS | DASH | INCR | DECR | BANG | TILDE | COLONCOLON) operatorExpression #prefix
     | LPAREN type RPAREN QUEST? operatorExpression #cast
     | operatorExpression (STAR | SLASH | PERCENT) operatorExpression #product
@@ -329,6 +329,10 @@ operatorExpression
     | ELLIPSIS operatorExpression #spread
     | <assoc=right> operatorExpression assignmentOperator operatorExpression #assign
     | primaryExpression #primary
+    ;
+
+invocationSuffix
+    : typeArguments? (valueArguments | lambda | lambdaBody)
     ;
 
 indexingSuffix
@@ -425,7 +429,7 @@ lambda
     ;
 
 lambdaParameter
-    : (annotation* typeOrVar) simpleIdentifier
+    : (annotation* typeOrVar)? simpleIdentifier
     | UNDERSCORE
     ;
 
