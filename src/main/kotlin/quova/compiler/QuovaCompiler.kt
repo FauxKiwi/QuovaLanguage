@@ -58,7 +58,16 @@ class QuovaCompiler(val src: String) {
             visit(ctx.annotationDeclaration())
         )
 
-    private fun visit(ctx: QuovaParser.ClassDeclarationContext): ClassDeclaration =
+    private fun visit(ctx: QuovaParser.ClassDeclarationContext): ClassDeclaration = run {
+        val allMembers = ctx.classBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<ClassMember>()
+        val staticMembers = mutableListOf<SingletonMember>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it as SingletonMember)
+            else
+                members.add(it)
+        }
         ClassDeclaration(
             ctx.inheritanceModifier()?.let { visit(it) },
             ctx.SEALED().isNotEmpty(),
@@ -67,8 +76,10 @@ class QuovaCompiler(val src: String) {
             ctx.variantTypeParameters()?.variantTypeParameter()?.map { visit(it) } ?: listOf(),
             ctx.valueParameters()?.valueParameter()?.map { visit(it) } ?: listOf(),
             ctx.supertypes()?.supertype()?.map { visit(it) } ?: listOf(),
-            ctx.classBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+            members,
+            staticMembers
         )
+    }
 
     private fun visit(ctx: QuovaParser.SingletonDeclarationContext): SingletonDeclaration =
         SingletonDeclaration(
@@ -77,23 +88,45 @@ class QuovaCompiler(val src: String) {
             ctx.singletonBody().singletonMember().mapNotNull { visit(it) }
         )
 
-    private fun visit(ctx: QuovaParser.InterfaceDeclarationContext): InterfaceDeclaration =
+    private fun visit(ctx: QuovaParser.InterfaceDeclarationContext): InterfaceDeclaration = run {
+        val allMembers = ctx.interfaceBody()?.declaration()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<Declaration>()
+        val staticMembers = mutableListOf<Declaration>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it)
+            else
+                members.add(it)
+        }
         InterfaceDeclaration(
             ctx.simpleIdentifier().text,
             ctx.variantTypeParameters()?.variantTypeParameter()?.map { visit(it) } ?: listOf(),
             ctx.userType().map { visit(it) },
-            ctx.interfaceBody().declaration().mapNotNull { visit(it) }
+            members,
+            staticMembers
         )
+    }
 
-    private fun visit(ctx: QuovaParser.EnumClassDeclarationContext): EnumClassDeclaration =
+    private fun visit(ctx: QuovaParser.EnumClassDeclarationContext): EnumClassDeclaration = run {
+        val allMembers = ctx.enumClassBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<ClassMember>()
+        val staticMembers = mutableListOf<SingletonMember>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it as SingletonMember)
+            else
+                members.add(it)
+        }
         EnumClassDeclaration(
             ctx.simpleIdentifier().text,
             ctx.variantTypeParameters().variantTypeParameter().map { visit(it) },
             ctx.valueParameters().valueParameter().map { visit(it) },
             ctx.supertypes().supertype().map { visit(it) },
             ctx.enumClassBody().enumClassEntries().enumClassEntry().map { visit(it) },
-            ctx.enumClassBody().classMember().mapNotNull { visit(it) }
+            members,
+            staticMembers
         )
+    }
 
     private fun visit(ctx: QuovaParser.PrimitiveEnumDeclarationContext): PrimitiveEnumDeclaration =
         PrimitiveEnumDeclaration(
@@ -103,27 +136,60 @@ class QuovaCompiler(val src: String) {
             ctx.primitiveEnumBody().primitiveEnumEntry().map { visit(it) }
         )
 
-    private fun visit(ctx: QuovaParser.RecordDeclarationContext): RecordDeclaration =
+    private fun visit(ctx: QuovaParser.RecordDeclarationContext): RecordDeclaration = run {
+        val allMembers = ctx.classBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<ClassMember>()
+        val staticMembers = mutableListOf<SingletonMember>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it as SingletonMember)
+            else
+                members.add(it)
+        }
         RecordDeclaration(
             ctx.simpleIdentifier().text,
             ctx.variantTypeParameters()?.variantTypeParameter()?.map { visit(it) } ?: listOf(),
             ctx.valueParameter().map { visit(it) },
-            ctx.classBody().classMember().mapNotNull { visit(it) }
+            members,
+            staticMembers
         )
+    }
 
-    private fun visit(ctx: QuovaParser.InlineClassDeclarationContext): InlineClassDeclaration =
+    private fun visit(ctx: QuovaParser.InlineClassDeclarationContext): InlineClassDeclaration = run {
+        val allMembers = ctx.classBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<ClassMember>()
+        val staticMembers = mutableListOf<SingletonMember>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it as SingletonMember)
+            else
+                members.add(it)
+        }
         InlineClassDeclaration(
             ctx.simpleIdentifier().text,
             visit(ctx.valueParameter()),
-            ctx.classBody()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+            members,
+            staticMembers
         )
+    }
 
-    private fun visit(ctx: QuovaParser.AnnotationDeclarationContext): AnnotationDeclaration =
+    private fun visit(ctx: QuovaParser.AnnotationDeclarationContext): AnnotationDeclaration = run {
+        val allMembers = ctx.annotationMembers()?.classMember()?.mapNotNull { visit(it) } ?: listOf()
+        val members = mutableListOf<ClassMember>()
+        val staticMembers = mutableListOf<SingletonMember>()
+        allMembers.forEach {
+            if (it.isStatic())
+                staticMembers.add(it as SingletonMember)
+            else
+                members.add(it)
+        }
         AnnotationDeclaration(
             ctx.simpleIdentifier().text,
             ctx.annotationMembers().annotationParameter().map { visit(it) },
-            ctx.annotationMembers().classMember().mapNotNull { visit(it) }
+            members,
+            staticMembers
         )
+    }
 
     private fun visit(ctx: QuovaParser.FunctionDeclarationContext, local: Boolean = false): FunctionDeclaration = run {
         val functionModifiers = visit(ctx.functionModifiers(), local)

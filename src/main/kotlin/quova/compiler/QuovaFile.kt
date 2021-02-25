@@ -27,14 +27,6 @@ data class QuovaFile(
             nl()
         }
     }
-
-    companion object {
-        const val standardImports = """import kotlin.Byte as `Byte-`
-import kotlin.UByte as `UByte-`
-import kotlin.Short as `Short-`
-import kotlin.UShort as `UShort-`
-        """
-    }
 }
 
 data class Import(
@@ -71,7 +63,10 @@ data class TypeDeclaration(
     val visibility: VisibilityModifier,
     val type: Type
 ) : Declaration {
-    interface Type
+    interface Type {
+        val members: List<Any>
+        val staticMembers: List<SingletonMember>
+    }
     // :-> ClassDeclaration, SingletonDeclaration, InterfaceDeclaration, EnumClassDeclaration,
     //     PrimitiveEnumDeclaration, RecordDeclaration, InlineClassDeclaration, AnnotationDeclaration
 
@@ -91,7 +86,8 @@ data class ClassDeclaration(
     val typeParameters: List<VariantTypeParameter>,
     val parameters: List<ValueParameter>,
     val supertypes: List<Supertype>,
-    val members: List<ClassMember>
+    override val members: List<ClassMember>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         inheritance?.let {
@@ -122,15 +118,25 @@ data class ClassDeclaration(
             typeConstraints.joinTo(this, prefix = " where ") {
                 it.second.joinToString(", ${it.first} : ", "${it.first} : ")
             }
-        if (members.isNotEmpty())
-            members.joinTo(this, "\n", " {\n", "\n}")
+        if (members.isNotEmpty() || staticMembers.isNotEmpty()) {
+            append(" {\n")
+            if (members.isNotEmpty())
+                members.joinTo(this, "\n")
+            if (staticMembers.isNotEmpty()) {
+                if (members.isNotEmpty())
+                    nl()
+                staticMembers.joinTo(this, "\n", "companion object {\n", "\n}")
+            }
+            append("\n}")
+        }
     }
 }
 
 data class SingletonDeclaration(
     val name: String,
     val supertypes: List<Supertype>,
-    val members: List<SingletonMember>
+    override val members: List<SingletonMember>,
+    override val staticMembers: List<Nothing> = listOf()
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("object ")
@@ -146,7 +152,8 @@ data class InterfaceDeclaration(
     val name: String,
     val typeParameters: List<VariantTypeParameter>,
     val supertypes: List<UserType>,
-    val members: List<Declaration>
+    override val members: List<Declaration>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("interface ")
@@ -176,7 +183,8 @@ data class EnumClassDeclaration(
     val parameters: List<ValueParameter>,
     val supertypes: List<Supertype>,
     val enumEntries: List<EnumEntry>,
-    val members: List<ClassMember>
+    override val members: List<ClassMember>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("enum class ")
@@ -197,12 +205,20 @@ data class EnumClassDeclaration(
             typeConstraints.joinTo(this, prefix = " where ") {
                 it.second.joinToString(", ${it.first} : ", "${it.first} : ")
             }
-        if (enumEntries.isNotEmpty() || members.isNotEmpty()) {
+        if (enumEntries.isNotEmpty() || members.isNotEmpty() || staticMembers.isNotEmpty()) {
             append(" {\n")
             if (enumEntries.isNotEmpty())
-                enumEntries.joinTo(this, ",\n", postfix = ";\n")
-            if (members.isNotEmpty())
+                enumEntries.joinTo(this, ",\n")
+            if (members.isNotEmpty()) {
+                if (enumEntries.isNotEmpty())
+                    append(";\n")
                 members.joinTo(this, "\n")
+            }
+            if (staticMembers.isNotEmpty()) {
+                if (members.isNotEmpty())
+                    nl()
+                staticMembers.joinTo(this, "\n", "companion object {\n", "\n}")
+            }
             append("\n}")
         }
     }
@@ -212,7 +228,9 @@ data class PrimitiveEnumDeclaration(
     val bitfield: Boolean,
     val type: Type,
     val name: String,
-    val entries: List<Entry>
+    val entries: List<Entry>,
+    override val members: List<Nothing> = listOf(),
+    override val staticMembers: List<Nothing> = listOf()
 ) : TypeDeclaration.Type {
     enum class Type(val string: String) {
         BYTE("UByte"), SBYTE("Byte"), SHORT("Short"), USHORT("UShort"), INT("Int"),
@@ -286,7 +304,8 @@ data class RecordDeclaration(
     val name: String,
     val typeParameters: List<VariantTypeParameter>,
     val parameters: List<ValueParameter>,
-    val members: List<ClassMember>
+    override val members: List<ClassMember>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("data class ")
@@ -308,15 +327,25 @@ data class RecordDeclaration(
             typeConstraints.joinTo(this, prefix = " where ") {
                 it.second.joinToString(", ${it.first} : ", "${it.first} : ")
             }
-        if (members.isNotEmpty())
-            members.joinTo(this, "\n", " {\n", "\n}")
+        if (members.isNotEmpty() || staticMembers.isNotEmpty()) {
+            append(" {\n")
+            if (members.isNotEmpty())
+                members.joinTo(this, "\n")
+            if (staticMembers.isNotEmpty()) {
+                if (members.isNotEmpty())
+                    nl()
+                staticMembers.joinTo(this, "\n", "companion object {\n", "\n}")
+            }
+            append("\n}")
+        }
     }
 }
 
 data class InlineClassDeclaration(
     val name: String,
     val value: ValueParameter,
-    val members: List<ClassMember>
+    override val members: List<ClassMember>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("inline class ")
@@ -328,23 +357,42 @@ data class InlineClassDeclaration(
             append("val ")
         append(value)
         append(')')
-        if (members.isNotEmpty())
-            members.joinTo(this, "\n", " {\n", "\n}")
+        if (members.isNotEmpty() || staticMembers.isNotEmpty()) {
+            append(" {\n")
+            if (members.isNotEmpty())
+                members.joinTo(this, "\n")
+            if (staticMembers.isNotEmpty()) {
+                if (members.isNotEmpty())
+                    nl()
+                staticMembers.joinTo(this, "\n", "companion object {\n", "\n}")
+            }
+            append("\n}")
+        }
     }
 }
 
 data class AnnotationDeclaration(
     val name: String,
     val parameters: List<ValueParameter>,
-    val members: List<ClassMember>
+    override val members: List<ClassMember>,
+    override val staticMembers: List<SingletonMember>
 ) : TypeDeclaration.Type {
     override fun toString(): String = buildString {
         append("annotation class ")
         append(name)
         if (parameters.isNotEmpty())
             parameters.joinTo(this, prefix = "(", postfix = ")")
-        if (members.isNotEmpty())
-            members.joinTo(this, "\n", " {\n", "\n}")
+        if (members.isNotEmpty() || staticMembers.isNotEmpty()) {
+            append(" {\n")
+            if (members.isNotEmpty())
+                members.joinTo(this, "\n")
+            if (staticMembers.isNotEmpty()) {
+                if (members.isNotEmpty())
+                    nl()
+                staticMembers.joinTo(this, "\n", "companion object {\n", "\n}")
+            }
+            append("\n}")
+        }
     }
 }
 
@@ -500,6 +548,15 @@ data class Property(
 
 interface ClassMember
 // :-> Declaration, Constructor, InitBlock
+
+fun ClassMember.isStatic(): Boolean = when (this) {
+    is TypeDeclaration -> false
+    is FunctionDeclaration -> modifiers.contains(FunctionModifier.STATIC)
+    is PropertyDeclaration -> modifiers.contains(PropertyModifier.STATIC)
+    is Constructor -> false
+    is InitBlock -> static
+    else -> false
+}
 
 interface SingletonMember
 // :-> Declaration, InitBlock
@@ -1438,13 +1495,13 @@ enum class AssignmentOperator(val string: String, val nonNative: Boolean = false
 }
 
 enum class InOperator(val string: String) : SwitchExpression.Branch.Condition.Type {
-    IN(" in "), NOT_IN(" !in ");
+    IN("in"), NOT_IN("!in");
 
     override fun toString(): String = string
 }
 
 enum class InstanceOperator(val string: String) : SwitchExpression.Branch.Condition.Type {
-    INSTANCEOF(" is "), NOT_INSTANCEOF(" !is ");
+    INSTANCEOF("is"), NOT_INSTANCEOF("!is");
 
     override fun toString(): String = string
 }
