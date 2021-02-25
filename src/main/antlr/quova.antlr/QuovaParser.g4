@@ -536,13 +536,18 @@ functionType
     : SUSPEND? FUNCTION LANGLE typeOrVoid LPAREN (type (COMMA type)*)? RPAREN RANGLE
     ;
 
-annotation
-    : AT identifier typeArguments? valueArguments?
-    ;
-
 ///////////////
 // MODIFIERS //
 ///////////////
+
+annotation
+    : AT identifier typeArguments? (LPAREN (annotationArgument (COMMA annotationArgument)*)? RPAREN)?
+    ;
+
+annotationArgument
+    : (simpleIdentifier ASSIGN)? LCURL (expression (COMMA expression)*)? RCURL
+    | valueArgument
+    ;
 
 functionModifiers
     : visibilityModifier? inheritanceModifier?

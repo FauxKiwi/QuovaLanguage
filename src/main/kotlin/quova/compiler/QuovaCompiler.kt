@@ -783,7 +783,11 @@ class QuovaCompiler(val src: String) {
         Annotation(
             ctx.identifier().text,
             ctx.typeArguments()?.typeArgument()?.map { visit(it) } ?: listOf(),
-            ctx.valueArguments()?.valueArgument()?.map { visit(it) } ?: listOf()
+            ctx.annotationArgument()?.map { it.valueArgument()?.let { va ->
+                Annotation.Argument(va.simpleIdentifier()?.text, Either.A(visit(va.expression())))
+            } ?:
+                Annotation.Argument(it.simpleIdentifier()?.text, Either.B(it.expression().map { visit(it) }))
+            } ?: listOf()
         )
 
     private fun visit(ctx: QuovaParser.FunctionModifiersContext, local: Boolean = false) = run {

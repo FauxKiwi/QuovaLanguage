@@ -106,12 +106,22 @@ data class ClassDeclaration(
             append("inner ")
         append("class ")
         append(name)
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = ">")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         if (parameters.isNotEmpty())
             parameters.joinTo(this, prefix = "(", postfix = ")")
         if (supertypes.isNotEmpty())
             supertypes.joinTo(this, prefix = " : ")
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
+            }
         if (members.isNotEmpty())
             members.joinTo(this, "\n", " {\n", "\n}")
     }
@@ -141,10 +151,20 @@ data class InterfaceDeclaration(
     override fun toString(): String = buildString {
         append("interface ")
         append(name)
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = ">")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         if (supertypes.isNotEmpty())
             supertypes.joinTo(this, prefix = " : ")
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
+            }
         if (members.isNotEmpty())
             members.joinTo(this, "\n", " {\n", "\n}")
     }
@@ -161,12 +181,22 @@ data class EnumClassDeclaration(
     override fun toString(): String = buildString {
         append("enum class ")
         append(name)
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = ">")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         if (parameters.isNotEmpty())
             parameters.joinTo(this, prefix = "(", postfix = ")")
         if (supertypes.isNotEmpty())
             supertypes.joinTo(this, prefix = " : ")
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
+            }
         if (enumEntries.isNotEmpty() || members.isNotEmpty()) {
             append(" {\n")
             if (enumEntries.isNotEmpty())
@@ -261,12 +291,22 @@ data class RecordDeclaration(
     override fun toString(): String = buildString {
         append("data class ")
         append(name)
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = ">")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         if (parameters.isNotEmpty())
             parameters.joinTo(this, prefix = "(", postfix = ")") {
                 if (it.variadic) "var $it"
                 else "val $it"
+            }
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
             }
         if (members.isNotEmpty())
             members.joinTo(this, "\n", " {\n", "\n}")
@@ -352,14 +392,24 @@ data class FunctionDeclaration(
             }
         }
         append("fun ")
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = "> ")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         append(name)
         parameters.joinTo(this, prefix = "(", postfix = ")")
         type?.let {
             append(": ")
             append(it)
         }
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
+            }
         body?.either({
             append(' ')
             append(it)
@@ -478,12 +528,22 @@ data class Constructor(
         append(visibility)
         append(' ')
         append("constructor")
-        if (typeParameters.isNotEmpty())
+        val typeConstraints = mutableListOf<Pair<String, List<String>>>()
+        if (typeParameters.isNotEmpty()) {
             typeParameters.joinTo(this, prefix = "<", postfix = "> ")
+            typeParameters.forEach {
+                if (it.constraints.size > 1)
+                    typeConstraints.add(it.name to it.constraints.map { c -> c.toString() })
+            }
+        }
         if (parameters.isNotEmpty())
             parameters.joinTo(this, prefix = "(", postfix = ")")
         if (delegates.isNotEmpty())
             delegates.joinTo(this, prefix = " : ")
+        if (typeConstraints.isNotEmpty())
+            typeConstraints.joinTo(this, prefix = " where ") {
+                it.second.joinToString(", ${it.first} : ", "${it.first} : ")
+            }
         body?.either({
             append(' ')
             append(it)
@@ -558,7 +618,7 @@ data class TypeParameter(
         if (reified)
             append("reified ")
         append(name)
-        if (constraints.isNotEmpty()) {
+        if (constraints.size == 1) {
             append(" : ")
             append(constraints[0])
         }
@@ -1468,8 +1528,25 @@ data class FunctionType(
 data class Annotation(
     val name: String /*ID*/,
     val typeArguments: List<TypeArgument>,
-    val valueArguments: List<ValueArgument>
+    val valueArguments: List<Argument>
 ) {
+    data class Argument(
+        val name: String?,
+        val value: Either<Expression, List<Expression> /*Array literal*/>
+    ) {
+        override fun toString(): String = buildString {
+            name?.let {
+                append(it)
+                append(" = ")
+            }
+            value.either({
+                append(it)
+            }, {
+                it.joinTo(this, prefix = "[", postfix = "]")
+            })
+        }
+    }
+
     override fun toString(): String = buildString {
         append('@')
         append(name)
