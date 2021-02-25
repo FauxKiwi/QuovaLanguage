@@ -402,6 +402,16 @@ data class PropertyDeclaration(
         }
         val type = if (type is Either.A) ": $type" else ""
         properties.joinTo(this, "\n") {
+            if (it.value is InitializerList) {
+                val iLType = this@PropertyDeclaration.type as? Either.A
+                iLType?.value?.let { t ->
+                    if (t.type is UserType) {
+                        it.value.types = List(t.arrayDim + 1) { i ->
+                            if (i < t.arrayDim) null else t.type
+                        }
+                    }
+                }
+            }
             "$common ${it.name}$type$it"
         }
     }
@@ -859,9 +869,7 @@ object PASS : StatementBody {
 interface Expression : Statement, SimpleStatement {
     val priority: Int
 
-    fun surroundIfHigher(other: Expression): String = (if (other.priority > priority) "($other)" else other.toString())/*.also {
-        println("_DEBUG: ${this::class} §$priority ~|~ ${other::class} §${other.priority} '>>> $it")
-    }*/
+    fun surroundIfHigher(other: Expression): String = (if (other.priority >= priority && other::class != this::class) "($other)" else other.toString())
 }
 // :-> PrimaryExpression, OperatorExpression, ListComprehension
 
@@ -999,7 +1007,7 @@ sealed class OperatorExpression(priority: Int) : Priority(priority) {
         val left: Expression,
         val right: Expression,
         val operator: Operator
-    ) : OperatorExpression(8) {
+    ) : OperatorExpression(10) {
         enum class Operator(val string: String) {
             LEFT("shl"), RIGHT("shr"), U_RIGHT("ushr");
 
@@ -1012,7 +1020,7 @@ sealed class OperatorExpression(priority: Int) : Priority(priority) {
     data class BitAnd(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(9) {
+    ) : OperatorExpression(10) {
         override fun toString(): String = "${surroundIfHigher(left)} and ${surroundIfHigher(right)}"
     }
 
@@ -1026,7 +1034,7 @@ sealed class OperatorExpression(priority: Int) : Priority(priority) {
     data class BitOr(
         val left: Expression,
         val right: Expression
-    ) : OperatorExpression(11) {
+    ) : OperatorExpression(10) {
         override fun toString(): String = "${surroundIfHigher(left)} or ${surroundIfHigher(right)}"
     }
 
@@ -1138,17 +1146,19 @@ data class ListComprehension(
 }
 
 data class ConstructorInvocation(
-    val type: UserType,
-    val typeArguments: List<TypeArgument>,
+    val type: UserType?,
     val arguments: Either<List<ValueArgument>, InitializerList>
 ) : PrimaryExpression() {
-    override fun toString(): String = buildString {
-        append(type)
-        if (typeArguments.isNotEmpty())
-            typeArguments.joinTo(this, prefix = "<", postfix = ">")
-        val args = arguments.either({ it }, { (it.arguments as Either.A).value }) //TODO: Dictionary initializer
-        args.joinTo(this, prefix = "(", postfix = ")")
-    }
+    override fun toString(): String =
+        arguments.either({
+            buildString {
+                append(type)
+                val args = it.map { l -> l.toString() }
+                args.joinTo(this, prefix = "(", postfix = ")")
+            }
+        }, {
+            it.toString()
+        })
 }
 
 interface Switch : Statement
@@ -1326,10 +1336,10 @@ data class Lambda(
 
 data class InitializerList(
     val arguments: Either<List<ValueArgument>, List<Pair<Expression, Expression>>>, // Normal <-> Dictionary
-    val userType: UserType?
+    var types: List<UserType?>
 ) : Literal() {
     override fun toString(): String = buildString {
-        if (userType == null)
+        if (types.isEmpty())
             arguments.either({
                 it.joinTo(this, prefix = "quova.internal.fittingArray(", postfix = ")")
             }, {
@@ -1337,14 +1347,20 @@ data class InitializerList(
                     "${pair.first} to ${pair.second}"
                 }
             })
-        else
+        else {
+            val nextTypes = if (types.isNotEmpty()) List(types.size - 1) { i -> types[i + 1] } else listOf()
             arguments.either({
-                it.joinTo(this, prefix = "$userType(", postfix = ")")
+                it.joinTo(this, prefix = "${types[0]?:"quova.internal.fittingArray"}(", postfix = ")") { va ->
+                    if (va.value is InitializerList)
+                        va.value.types = nextTypes
+                    va.toString()
+                }
             }, {
-                it.joinTo(this, prefix = "$userType(", postfix = ")") { pair ->
+                it.joinTo(this, prefix = "${types[0]?:"hashMapOf"}(", postfix = ")") { pair ->
                     "${pair.first} to ${pair.second}"
                 }
             })
+        }
     }
 }
 
@@ -1421,7 +1437,7 @@ data class PrimitiveType(
         override fun toString(): String = string
     }
 
-    override fun toString(): String = "$type${if (array) "Array" else ""}"
+    override fun toString(): String = if (array) "${if (type == Type.INT) "Int" else type.toString()}Array" else type.toString()
 }
 
 data class UserType(

@@ -1,1 +1,2 @@
-public synchronized strictfp void a() throws A, B;
+T t = { u, { u2 } };
+v[] v = { w, { x }, {{ y }}};

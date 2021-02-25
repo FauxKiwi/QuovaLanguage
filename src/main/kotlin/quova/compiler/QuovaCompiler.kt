@@ -525,7 +525,10 @@ class QuovaCompiler(val src: String) {
     private fun visit(ctx: QuovaParser.InvocationSuffixContext): OperatorExpression.Postfix.Invocation =
         OperatorExpression.Postfix.Invocation(
             ctx.typeArguments()?.typeArgument()?.map { visit(it) } ?: listOf(),
-            ctx.valueArguments()?.let { va -> va.valueArgument().map { visit(it)} } ?:
+            ctx.valueArguments()?.let { va -> va.valueArgument().map { visit(it)} }?.let {
+                    va -> ctx.lambdaBody()?.let { va + ValueArgument(null, Lambda(
+                        listOf(), Either.B(visit(ctx.lambdaBody())))
+                    ) } ?: va } ?:
             ctx.lambda()?.let { listOf(ValueArgument(null, visit(it))) } ?:
             listOf(ValueArgument(null, Lambda(listOf(), Either.B(visit(ctx.lambdaBody())))))
         )
@@ -559,15 +562,38 @@ class QuovaCompiler(val src: String) {
         ctx.literal()?.let { visit(it) } ?:
         LiteralLiteral(ctx.identifier().text)
 
-    private fun visit(ctx: QuovaParser.ConstructorInvocationContext): ConstructorInvocation =
-        ConstructorInvocation(
-            visit(ctx.userType()),
-            ctx.typeArguments()?.typeArgument()?.map { visit(it) } ?: listOf(),
+    private fun visit(ctx: QuovaParser.ConstructorInvocationContext): ConstructorInvocation {
+        if (!ctx.LSQUARE().isNullOrEmpty()) {
+            return ctx.primitiveTypeNoArray()?.let {
+                ConstructorInvocation(null, Either.B(visit(ctx.initializerList())))
+            } ?:
+            ConstructorInvocation(null, Either.B(visit(ctx.initializerList(), List(ctx.LSQUARE().size + 1) { i ->
+                if (i < ctx.LSQUARE().size) null else visit(ctx.userType())
+            })))
+        }
+        if (!ctx.arraySize().isNullOrEmpty()) {
+            return ctx.primitiveTypeNoArray()?.let {
+                if (ctx.arraySize().size == 1)
+                    ConstructorInvocation(
+                        UserType("${it.text.capitalize()}Array", listOf()),
+                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression()))))
+                    )
+                else
+                    ConstructorInvocation(UserType("Array<${visit(ctx.primitiveTypeNoArray())}>", listOf()),
+                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression())))))
+            } ?:
+            ConstructorInvocation(UserType("Array<${visit(ctx.userType())}>", listOf()),
+                Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression())))))
+        }
+        val userType = visit(ctx.userType())
+        return ConstructorInvocation(
+            userType,
             Either(
                 ctx.valueArguments()?.valueArgument()?.map { visit(it) },
-                ctx.initializerList()?.let { visit(it, ctx.userType()) }
+                ctx.initializerList()?.let { visit(it, listOf(userType)) }
             )
         )
+    }
 
     private fun visit(ctx: QuovaParser.SwitchExpressionContext): Switch =
         ctx.whenExpression()?.let { whenExpression ->
@@ -658,7 +684,7 @@ class QuovaCompiler(val src: String) {
             ctx.expression()?.let { visit(it) }
         )
 
-    private fun visit(ctx: QuovaParser.InitializerListContext, userType: QuovaParser.UserTypeContext? = null): InitializerList =
+    private fun visit(ctx: QuovaParser.InitializerListContext, types: List<UserType?> = listOf()): InitializerList =
         InitializerList(
             ctx.dictionaryInitializer()?.let { di ->
                 Either(
@@ -669,7 +695,7 @@ class QuovaCompiler(val src: String) {
             Either(
                 ctx.valueArgument().map { visit(it) }, null
             ),
-            userType?.let { visit(it) }
+            types
         )
 
     private fun visit(ctx: QuovaParser.AssignmentOperatorContext): AssignmentOperator =
@@ -715,13 +741,16 @@ class QuovaCompiler(val src: String) {
         ctx.primitiveType()?.let { visit(it) } ?:
         visit(ctx.userType())
 
+    private fun visit(ctx: QuovaParser.PrimitiveTypeNoArrayContext): PrimitiveType.Type =
+        ctx.primitiveNumberType()?.let { visit(it) } ?:
+        ctx.FLOAT()?.let { PrimitiveType.Type.FLOAT } ?:
+        ctx.DOUBLE()?.let { PrimitiveType.Type.DOUBLE } ?:
+        ctx.CHAR()?.let { PrimitiveType.Type.CHAR } ?:
+        PrimitiveType.Type.BOOLEAN
+
     private fun visit(ctx: QuovaParser.PrimitiveTypeContext): PrimitiveType =
         PrimitiveType(
-            ctx.primitiveNumberType()?.let { visit(it) } ?:
-            ctx.FLOAT()?.let { PrimitiveType.Type.FLOAT } ?:
-            ctx.DOUBLE()?.let { PrimitiveType.Type.DOUBLE } ?:
-            ctx.CHAR()?.let { PrimitiveType.Type.CHAR } ?:
-            PrimitiveType.Type.BOOLEAN,
+            visit(ctx.primitiveTypeNoArray()),
             ctx.LSQUARE().bool()
         )
 

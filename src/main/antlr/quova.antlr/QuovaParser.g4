@@ -332,7 +332,7 @@ operatorExpression
     ;
 
 invocationSuffix
-    : typeArguments? (valueArguments | lambda | lambdaBody)
+    : typeArguments? (valueArguments lambdaBody? | lambda | lambdaBody)
     ;
 
 indexingSuffix
@@ -356,7 +356,13 @@ primaryExpression
     ;
 
 constructorInvocation
-    : NEW userType typeArguments? (valueArguments | initializerList)
+    : NEW userType (valueArguments | initializerList)
+    | NEW (primitiveTypeNoArray | userType) (LSQUARE RSQUARE)+ initializerList
+    | NEW (primitiveTypeNoArray | userType) arraySize+
+    ;
+
+arraySize
+    : LSQUARE expression RSQUARE
     ;
 
 switchExpression
@@ -499,13 +505,16 @@ typeReference
     | userType
     ;
 
-primitiveType
-    : (primitiveNumberType
+primitiveTypeNoArray
+    : primitiveNumberType
     | FLOAT
     | DOUBLE
     | CHAR
-    | BOOLEAN)
-    (LSQUARE RSQUARE)?
+    | BOOLEAN
+    ;
+
+primitiveType
+    : primitiveTypeNoArray (LSQUARE RSQUARE)?
     ;
 
 primitiveNumberType

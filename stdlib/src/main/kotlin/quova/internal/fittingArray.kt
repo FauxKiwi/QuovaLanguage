@@ -24,5 +24,5 @@ inline fun fittingArray(vararg elements: Double) = elements
 inline fun fittingArray(vararg elements: Char) = elements
 @Suppress("nothing_to_inline")
 inline fun fittingArray(vararg elements: Boolean) = elements
-@Suppress("nothing_to_inline")
-inline fun <T> fittingArray(vararg elements: T) = elements
+
+inline fun <reified T> fittingArray(vararg elements: T) = elements
