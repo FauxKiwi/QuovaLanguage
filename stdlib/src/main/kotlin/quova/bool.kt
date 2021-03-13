@@ -1,3 +1,5 @@
 package quova
 
-fun Any?.bool() = this?.let { true } ?: false
+inline fun <reified N : Number> N.bool() = this != (0 as N)
+
+fun Any?.bool() = this != null

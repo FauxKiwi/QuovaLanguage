@@ -1,5 +1,6 @@
 package quova.compiler
 
+import quova.Either
 import java.io.File
 
 data class QuovaModule(
@@ -9,14 +10,25 @@ data class QuovaModule(
     val buildContext: BuildContext
 ) {
     data class BuildContext(
-        val repositories: MutableList<String>,
-        val dependencies: List<Dependency>,
+        val plugins: MutableList<Either<Plugin, String>>,
+        val repositories: MutableList<Pair<String, Boolean /* Raw */>>,
+        val dependencies: List<Either<Dependency, String>>,
         val variables: List<Variable>,
         val others: List<OtherOption>
     ) {
         init {
             if (!repositories.contains("mavenCentral"))
-                repositories.add("mavenCentral")
+                repositories.add("mavenCentral" to false)
+            val plugin: Either<Plugin, String> = Either.A(Plugin("org.jetbrains.kotlin.jvm", "1.4.10"))
+            if (!plugins.contains(plugin))
+                plugins.add(plugin)
+        }
+
+        data class Plugin(
+            val id: String,
+            val version: String?
+        ) {
+            override fun toString(): String = "id \"$id\"${version?.let { " version \"$version\"" } ?: ""}"
         }
 
         data class Dependency(
@@ -48,11 +60,9 @@ data class QuovaModule(
     }
 
     fun gradleBuild(libs: File): String = buildString {
-        append("""
-            plugins {
-                id 'org.jetbrains.kotlin.jvm' version '1.4.10'
-            }
-        """.trimIndent())
+        buildContext.plugins.joinTo(
+            this, "\n\t", "plugins {\n\t", "\n}"
+        )
         append("\n\ngroup = \"")
         append(group)
         append("\"\nversion = \"")
@@ -63,7 +73,7 @@ data class QuovaModule(
         )
         buildContext.repositories.joinTo(
             this, "\n\t", "repositories {\n\tflatDir {\n\t\tdirs '${libs.path.replace("\\", "\\\\")}'\n\t}\n\t", "\n}\n\n"
-        ) { "$it()" }
+        ) { if (it.second) it.first else "${it.first}()" }
         append("dependencies {\n\timplementation name: 'stdlib-1.0-SNAPSHOT'")
         buildContext.dependencies.forEach {
             append("\n\t")

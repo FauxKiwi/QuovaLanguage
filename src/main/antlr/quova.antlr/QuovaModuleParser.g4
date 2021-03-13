@@ -1,4 +1,6 @@
-grammar QuovaModule;
+parser grammar QuovaModuleParser;
+
+options { tokenVocab = QuovaModuleLexer; }
 
 quovaModule
     : project group version element* EOF
@@ -17,14 +19,29 @@ version
     ;
 
 element
-    : repositories
+    : plugins
+    | repositories
     | dependencies
     | otherOption
     | variableDeclaration
     ;
 
+plugins
+    : PLUGINS COLON (LSQUARE (plugin (COMMA plugin)*)? RSQUARE | (DASH plugin)+)
+    ;
+
+plugin
+    : name versionName?
+    | raw
+    ;
+
 repositories
-    : REPOSITORIES COLON (LSQUARE (name (COMMA name)*)? RSQUARE | (DASH name)+)
+    : REPOSITORIES COLON (LSQUARE (repository (COMMA repository)*)? RSQUARE | (DASH repository)+)
+    ;
+
+repository
+    : name
+    | raw
     ;
 
 dependencies
@@ -33,6 +50,7 @@ dependencies
 
 dependency
     : (IMPL | ONLY_COMPILE | ONLY_RUNTIME) name COLON name COLON versionName
+    | raw
     ;
 
 otherOption
@@ -52,6 +70,7 @@ name
     | PROJECT
     | GROUP
     | VERSION
+    | PLUGINS
     | REPOSITORIES
     | DEPENDENCIES
     | IMPL
@@ -69,30 +88,10 @@ text
     : ((name | versionName) DOT?)+
     ;
 
-COMMENT: '#' .*? (NL | EOF) -> channel(HIDDEN);
-NL: ([\r\n] | '\r\n') -> channel(HIDDEN);
-SPACE: [ \t\f]+ -> channel(HIDDEN);
+raw
+    : RAW_BEGIN rawContent RAW_END
+    ;
 
-PROJECT: 'project';
-GROUP: 'group';
-VERSION: 'version';
-REPOSITORIES: 'repositories';
-DEPENDENCIES: 'dependencies';
-IMPL: 'impl';
-ONLY_COMPILE: 'compile';
-ONLY_RUNTIME: 'runtime';
-
-DASH_SNAPSHOT: '-SNAPSHOT';
-
-LSQUARE: '[';
-RSQUARE: ']';
-DOT: '.';
-COLON: ':';
-COMMA: ',';
-DASH: '-';
-DOLLAR: '$';
-EQUALS: '=';
-
-NUMBER: [0-9]+;
-
-TEXT: [a-zA-Z_] [a-zA-Z0-9_]*;
+rawContent
+    : RAW*
+    ;

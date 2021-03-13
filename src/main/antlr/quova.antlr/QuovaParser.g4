@@ -159,7 +159,7 @@ valueParameters
     ;
 
 valueParameter
-    : annotation* VAR? type ELLIPSIS? simpleIdentifier (ASSIGN expression)?
+    : annotation* (CROSSINLINE | NOINLINE)? VAR? type ELLIPSIS? simpleIdentifier (ASSIGN expression)?
     ;
 
 typeParameters
@@ -229,6 +229,7 @@ statement
     | ifStatement
     | switchExpression
     | loopStatement
+    | tryCatchFinally
     | jumpStatement SEMI
     | block
     | declaration
@@ -291,6 +292,19 @@ jumpStatement
     | CONTINUE
     | THROW expression
     | RETURN expression (AT simpleIdentifier)?
+    ;
+
+tryCatchFinally
+    : TRY LPAREN resource (SEMI resource)* RPAREN tryBody=statementBody catchBlock* (FINALLY finallyBody=statementBody)?
+    | TRY tryBody=statementBody (catchBlock* FINALLY finallyBody=statementBody | catchBlock+)
+    ;
+
+catchBlock
+    : CATCH LPAREN userType (PIPE userType)* simpleIdentifier RPAREN statementBody
+    ;
+
+resource
+    : identifier | annotation* typeOrVar simpleIdentifier ASSIGN expression
     ;
 
 /////////////////
@@ -387,12 +401,13 @@ whenCondition
 //////////////
 
 literal
-    : stringLiteral
-    | multilineStringLiteral
+    : STRING_LITERAL | RAW_STRING_LITERAL | REGEX_LITERAL //stringLiteral
+    | MULTILINE_STRING_LITERAL //multilineStringLiteral
     | THIS
     | superLiteral
     | INTEGER_LITERAL
     | LONG_LITERAL
+    | UINT_LITERAL | ULONG_LITERAL
     | REAL_LITERAL
     | CHAR_LITERAL
     | TRUE
@@ -403,7 +418,7 @@ literal
     | initializerList
     ;
 
-stringLiteral
+/*stringLiteral
     : STRING_LITERAL stringLiteralContent* END
     ;
 
@@ -424,7 +439,7 @@ multilineStringLiteral
 multilineStringLiteralContent
     : CHARACTERS
     | stringLiteralExpression
-    ;
+    ;*/
 
 superLiteral
     : SUPER (LANGLE userType RANGLE)?
@@ -571,6 +586,7 @@ visibilityModifier
 inheritanceModifier
     : FINAL
     | ABSTRACT
+    | VIRTUAL
     ;
 
 varianceModifier
@@ -598,8 +614,6 @@ identifier
 
 simpleIdentifier
     : IDENTIFIER
-    | RESERVED
-    | BACKSTICK
     | IMPORT
     | ENUM
     | RECORD
@@ -620,10 +634,18 @@ simpleIdentifier
     | READONLY
     | FINAL
     | ABSTRACT
+    | VIRTUAL
     | INLINE
     | TAILREC
     | SUSPEND
+    | NOINLINE
+    | CROSSINLINE
     | REIFIED
     | OUT
     | CONST
+    | STRICTFP
+    | NATIVE
+    | SYNCHRONIZED
+    | TRANSIENT
+    | VOLATILE
     ;

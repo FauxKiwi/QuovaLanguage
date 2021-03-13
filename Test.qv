@@ -1,3 +1,10 @@
-var x = List<int>();
-var y = List<Integer>();
-var z = List<?>();
+public inline <R> R stack(function<R(MemoryStack)> block) {
+    try (var stack = MemoryStack.push()) {
+        block(stack);
+    }
+}
+
+public void main() {
+    stack(stack) -> {
+    };
+}

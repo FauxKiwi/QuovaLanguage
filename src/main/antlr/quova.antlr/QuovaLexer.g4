@@ -51,6 +51,9 @@ BREAK: 'break';
 CONTINUE: 'continue';
 RETURN: 'return';
 THROW: 'throw';
+TRY: 'try';
+CATCH: 'catch';
+FINALLY: 'finally';
 
 TRUE: 'true';
 FALSE: 'false';
@@ -87,10 +90,14 @@ READONLY: 'readonly';
 
 FINAL: 'final';
 ABSTRACT: 'abstract';
+VIRTUAL: 'virtual';
 
 INLINE: 'inline';
 TAILREC: 'tailrec';
 SUSPEND: 'suspend';
+
+NOINLINE: 'noinline';
+CROSSINLINE: 'crossinline';
 
 REIFIED: 'reified';
 
@@ -101,9 +108,6 @@ VOLATILE: 'volatile';
 TRANSIENT: 'transient';
 
 STATIC: 'static';
-
-RESERVED: 'Byte' | 'UByte' | 'Short' | 'Int' | 'UInt' | 'Long' | 'ULong' | 'Float' | 'Double' | 'Unit' | 'Any';
-BACKSTICK: 'is';
 
 // Symbols
 
@@ -118,8 +122,8 @@ LPAREN: '(';
 RPAREN: ')';
 LSQUARE: '[';
 RSQUARE: ']';
-LCURL: '{' -> pushMode(DEFAULT_MODE);
-RCURL: '}' -> popMode;
+LCURL: '{';// -> pushMode(DEFAULT_MODE);
+RCURL: '}';// -> popMode;
 LANGLE: '<';
 RANGLE: '>';
 
@@ -184,14 +188,19 @@ HEX_LITERAL: '0' [xX] HexDigitOr_* HexDigit;
 BIN_LITERAL: '0' [bB] [01_]* [01];
 OCT_LITERAL: '0' [0-7_]* [0-7];
 
+UINT_LITERAL: INTEGER_LITERAL [uU];
+ULONG_LITERAL: INTEGER_LITERAL [uU] [lL] | LONG_LITERAL [uU];
+
 REAL_LITERAL: HEX_REAL_LITERAL | IntegerLiteral ([fFdDmM] | Exponent [fFdDmM]?) | Digit (DigitOr_* Digit)? '.' Digit (DigitOr_* Digit)? Exponent? [fFdDmM]?;
 HEX_REAL_LITERAL: '0' [xX] HexDigitOr_* HexDigit ('.' HexDigit (HexDigitOr_* HexDigit)?)? 'p' IntegerLiteral;
 fragment Exponent: [eE] [+-]? IntegerLiteral;
 
 CHAR_LITERAL: '\'' (~[\\'] | EscapeSeq | '\\\'') '\'';
 
-MULTILINE_STRING_LITERAL: '"""' -> pushMode(MULTILINE_STRING);
-STRING_LITERAL: '"'  -> pushMode(STRING);
+MULTILINE_STRING_LITERAL: '"""' ('"' ~'"' | '""' ~'"' | ~'"' | '${\'"\'}')* '"""';// -> pushMode(MULTILINE_STRING);
+STRING_LITERAL: '"' (~["\\\r\n] | EscapeSeq | '\\"')* '"';//  -> pushMode(STRING);
+RAW_STRING_LITERAL: '`' (~'`' | '${\'`\'}')* '`';
+REGEX_LITERAL: '/' (~'/' | '\\/')* '/';
 
 fragment EscapeSeq: '\\' ([rntf\\] | 'u' HexDigit HexDigit HexDigit HexDigit | Digit);
 
@@ -202,7 +211,7 @@ IDENTIFIER: [a-zA-Z_][a-zA-Z0-9_]*;
 ERROR_CHAR: .;
 
 
-mode STRING;
+/*mode STRING;
 
 SINGLE_EXPR: '$' IDENTIFIER;
 
@@ -218,4 +227,4 @@ MULTILINE_STRING_EXPR: '${' -> type(COMPLEX_EXPR), pushMode(DEFAULT_MODE);
 
 MULTILINE_CHARACTERS: (~'$' | '$' ~'{')+ -> type(CHARACTERS);
 
-MULTILINE_END: '"""' -> type(END), popMode;
+MULTILINE_END: '"""' -> type(END), popMode;*/

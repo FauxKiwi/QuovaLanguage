@@ -94,8 +94,6 @@ data class ClassDeclaration(
             append(it)
             append(' ')
         }
-        if (inheritance != InheritanceModifier.FINAL)
-            append("open ")
         if (sealed)
             append("sealed ")
         if (inner)
@@ -431,8 +429,6 @@ data class FunctionDeclaration(
             append(it)
             append(' ')
         }
-        /*if (inheritance != InheritanceModifier.FINAL)
-            append("open ")*/ //TODO: Allow
         modifiers.forEach {
             if (it != FunctionModifier.STRICTFP && it != FunctionModifier.STATIC && it != FunctionModifier.SYNCHRONIZED) {
                 append(it)
@@ -510,7 +506,14 @@ data class PropertyDeclaration(
                     }
                 }
             }
-            "$common ${it.name}$type$it"
+            val ir = "$common ${it.name}$type$it"
+            if (visibility != VisibilityModifier.LOCAL && !modifiers.contains(PropertyModifier.CONST) && it.getter == null && it.setter == null && it.delegate == null)
+                if (it.value == null && !modifiers.contains(PropertyModifier.READONLY) && inheritance != InheritanceModifier.FINAL && type.isNotEmpty())
+                    "${common.substring(0, common.length - 3)}lateinit var ${it.name}$type$it"
+                else
+                    "@JvmField\n$ir"
+            else
+                ir
         }
     }
 }
@@ -637,6 +640,8 @@ data class EnumEntry(
 
 data class ValueParameter(
     val annotations: List<Annotation>,
+    val noinline: Boolean,
+    val crossinline: Boolean,
     val variadic: Boolean,
     val type: Type,
     val vararg: Boolean,
@@ -648,6 +653,10 @@ data class ValueParameter(
             append(it)
             append(' ')
         }
+        if (noinline)
+            append("noinline ")
+        if (crossinline)
+            append("crossinline ")
         if (vararg)
             append("vararg ")
         append(name)
@@ -968,6 +977,86 @@ data class JumpStatement(
         value?.let {
             append(' ')
             append(it)
+        }
+    }
+}
+
+data class TryCatchFinally(
+    val resources: List<Resource>,
+    val tryBody: StatementBody,
+    val catches: List<Catch>,
+    val finallyBody: StatementBody?
+) : Statement {
+    data class Resource(
+        val annotations: List<Annotation>,
+        val type: Either<Type, VAR>?,
+        val name: String?,
+        val value: Expression
+    )
+
+    data class Catch(
+        val types: List<UserType>,
+        val exceptionName: String,
+        val body: StatementBody
+    ) {
+        override fun toString(): String = types.joinToString(" ") { type -> buildString {
+                append("catch (")
+                append(exceptionName)
+                append(": ")
+                append(type)
+                append(") ")
+                when (body) {
+                    is Block -> append(body)
+                    is Statement -> append("{\n$body\n}")
+                    is PASS -> append("{\n}")
+                }
+            }
+        }
+    }
+
+    override fun toString(): String = buildString {
+        resources.forEach { r ->
+            if (r.type != null) {
+                r.annotations.joinTo(this, "\n")
+                if (r.annotations.isNotEmpty())
+                    append('\n')
+                append("var ${r.name}${r.type.either({ ": $it" },{ "" })} = ${r.value}\n")
+            }
+        }
+        append("try ")
+        when (tryBody) {
+            is Block -> append(tryBody)
+            is Statement -> append("{\n$tryBody\n}")
+            is PASS -> append("{\n}")
+        }
+        catches.forEach {
+            append(' ')
+            append(it)
+        }
+        val finally = mutableListOf<Statement>()
+        when (finallyBody) {
+            is Block -> finally.addAll(finallyBody.statements)
+            is Statement -> finally.add(finallyBody)
+        }
+        resources.forEach { r ->
+            finally.add(OperatorExpression.Postfix(
+                OperatorExpression.Postfix(
+                    OperatorExpression.Cast(
+                        Type(UserType("java.lang.AutoClosable", listOf()), 0, false),
+                        false,
+                        r.name?.let { LiteralLiteral(it) } ?: r.value,
+                    ),
+                    OperatorExpression.Postfix.Call(
+                        OperatorExpression.Postfix.Call.Operator.DOT,
+                        Either.A(LiteralLiteral("close"))
+                    )
+                ),
+                OperatorExpression.Postfix.Invocation(listOf(), listOf())
+            ))
+        }
+        if (finally.isNotEmpty()) {
+            append(" finally ")
+            append(Block(finally))
         }
     }
 }
@@ -1377,7 +1466,7 @@ data class StringLiteral(
 data class MultilineStringLiteral(
     val content: String
 ) : Literal() {
-    override fun toString(): String = "\"\"$content\"\""
+    override fun toString(): String = content
 }
 
 object THIS : Literal() {
@@ -1570,7 +1659,7 @@ data class UserType(
 
 data class FunctionType(
     val suspend: Boolean,
-    val returnType: Type,
+    val returnType: Either<Type, VOID>,
     val parameterTypes: List<Type>
 ) : Type.Type {
     override fun toString(): String = buildString {
@@ -1632,7 +1721,7 @@ enum class VisibilityModifier(val string: String = "") {
 }
 
 enum class InheritanceModifier(val string: String) {
-    FINAL("final"), ABSTRACT("abstract");
+    FINAL("final"), ABSTRACT("abstract"), VIRTUAL("open");
 
     override fun toString(): String = string
 }

@@ -284,6 +284,7 @@ class QuovaCompiler(val src: String) {
     private fun visit(ctx: QuovaParser.AnnotationParameterContext): ValueParameter =
         ValueParameter(
             ctx.annotation().map { visit(it) },
+            noinline=false, crossinline=false,
             false,
             visit(ctx.type()),
             false,
@@ -297,6 +298,8 @@ class QuovaCompiler(val src: String) {
     private fun visit(ctx: QuovaParser.ValueParameterContext): ValueParameter =
         ValueParameter(
             ctx.annotation().map { visit(it) },
+            ctx.NOINLINE().bool(),
+            ctx.CROSSINLINE().bool(),
             ctx.VAR().bool(),
             visit(ctx.type()),
             ctx.ELLIPSIS().bool(),
@@ -353,16 +356,6 @@ class QuovaCompiler(val src: String) {
             ctx.functionBody()?.let { visit(it) }
         )
 
-    /*
-    private Setter visit(QuovaParser.SetterContext ctx) =>
-        new Setter(
-            visit(a) for a : ctx.annotation(),
-            ctx.setterParameter()?{ a for a : annotation() } : listOf(),
-            ctx.setterParameter()?.simpleIdentifier()?.text,
-            ctx.functionBody()?{ visit(this) }
-        );
-     */
-
     private fun visit(ctx: QuovaParser.StatementContext): Statement? =
         ctx.labeledStatement()?.let { visit(it) } ?:
         ctx.assignment()?.let { visit(it) } ?:
@@ -372,6 +365,7 @@ class QuovaCompiler(val src: String) {
             loop.forStatement()?.let { visit(it) } ?:
             visit(loop.whileStatement())
         } ?:
+        ctx.tryCatchFinally()?.let { visit(it) } ?:
         ctx.jumpStatement()?.let { visit(it) } ?:
         ctx.block()?.let { visit(it) } ?:
         ctx.declaration()?.let { visit(it, true) } ?:
@@ -448,6 +442,28 @@ class QuovaCompiler(val src: String) {
             JumpStatement.Order.RETURN,
             ctx.simpleIdentifier()?.text,
             ctx.expression()?.let { visit(it) }
+        )
+
+    private fun visit(ctx: QuovaParser.TryCatchFinallyContext): TryCatchFinally =
+        TryCatchFinally(
+            ctx.resource().map { r ->
+                TryCatchFinally.Resource(
+                    r.annotation().map { visit(it) },
+                    r.typeOrVar()?.let { visit(it) },
+                    r.simpleIdentifier()?.text,
+                    r.expression()?.let { visit(it) } ?:
+                    LiteralLiteral(r.identifier().text)
+                )
+            },
+            visit(ctx.tryBody),
+            ctx.catchBlock().map {
+                TryCatchFinally.Catch(
+                    it.userType().map { u -> visit(u) },
+                    it.simpleIdentifier().text,
+                    visit(it.statementBody())
+                )
+            },
+            ctx.finallyBody?.let { visit(it) }
         )
 
     private fun visit(ctx: QuovaParser.StatementBodyContext): StatementBody =
@@ -629,6 +645,25 @@ class QuovaCompiler(val src: String) {
         LiteralLiteral(ctx.identifier().text)
 
     private fun visit(ctx: QuovaParser.ConstructorInvocationContext): ConstructorInvocation {
+        if (!ctx.arraySize().isNullOrEmpty()) {
+            val primitive = ctx.primitiveTypeNoArray().bool()
+            val npArraySize = ctx.arraySize().size - if (primitive) 1 else 0
+            fun returnValue(npArraySize: Int, maxAS: Int, primitive: Boolean): ConstructorInvocation = if (npArraySize >= maxAS) (
+                    if (primitive) ConstructorInvocation(UserType(PrimitiveType(visit(ctx.primitiveTypeNoArray()), true).toString(), listOf()),
+                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[maxAS].expression())))))
+                    else ConstructorInvocation(UserType("Array", listOf(TypeArgument(true, null, Type(visit(ctx.userType()), 0, false)))),
+                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[maxAS].expression())))))
+            ) else ConstructorInvocation(UserType(
+                "Array", listOf()
+                ), Either.A(listOf(
+                    ValueArgument(null, visit(ctx.arraySize()[npArraySize].expression())),
+                    ValueArgument(null, Lambda(listOf(), Either.A(
+                        returnValue(npArraySize + 1, maxAS, primitive)
+                    )))
+                ))
+            )
+            return returnValue(0, npArraySize, primitive)
+        }
         if (!ctx.LSQUARE().isNullOrEmpty()) {
             return ctx.primitiveTypeNoArray()?.let {
                 ConstructorInvocation(null, Either.B(visit(ctx.initializerList())))
@@ -636,20 +671,6 @@ class QuovaCompiler(val src: String) {
             ConstructorInvocation(null, Either.B(visit(ctx.initializerList(), List(ctx.LSQUARE().size + 1) { i ->
                 if (i < ctx.LSQUARE().size) null else visit(ctx.userType())
             })))
-        }
-        if (!ctx.arraySize().isNullOrEmpty()) {
-            return ctx.primitiveTypeNoArray()?.let {
-                if (ctx.arraySize().size == 1)
-                    ConstructorInvocation(
-                        UserType("${it.text.capitalize()}Array", listOf()),
-                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression()))))
-                    )
-                else
-                    ConstructorInvocation(UserType("Array<${visit(ctx.primitiveTypeNoArray())}>", listOf()),
-                        Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression())))))
-            } ?:
-            ConstructorInvocation(UserType("Array<${visit(ctx.userType())}>", listOf()),
-                Either.A(listOf(ValueArgument(null, visit(ctx.arraySize()[0].expression())))))
         }
         val userType = visit(ctx.userType())
         return ConstructorInvocation(
@@ -713,12 +734,20 @@ class QuovaCompiler(val src: String) {
     }
 
     private fun visit(ctx: QuovaParser.LiteralContext): Literal =
-        ctx.stringLiteral()?.let { StringLiteral(it.text) } ?:
-        ctx.multilineStringLiteral()?.let { MultilineStringLiteral(it.text) } ?:
+        ctx.STRING_LITERAL()?.let { StringLiteral(it.text) } ?:
+        ctx.MULTILINE_STRING_LITERAL()?.let { MultilineStringLiteral(it.text) } ?:
+        ctx.RAW_STRING_LITERAL()?.let { MultilineStringLiteral(
+            "\"\"\"${it.text.substring(1, it.text.length - 1).replace("\"\"\"", "\"\"\${'\"'}")}\"\"\""
+            ) } ?:
+        ctx.REGEX_LITERAL()?.let { LiteralLiteral(
+            "kotlin.text.Regex(\"\"\"${it.text.substring(1, it.text.length - 1).replace("\"\"\"", "\"\"\${'\"'}")}\"\"\")"
+        ) } ?:
         ctx.THIS()?.let { THIS } ?:
         ctx.superLiteral()?.let { visit(it) } ?:
         ctx.INTEGER_LITERAL()?.let { LiteralLiteral(it.text) } ?:
         ctx.LONG_LITERAL()?.let { LiteralLiteral(it.text) } ?:
+        ctx.UINT_LITERAL()?.let { LiteralLiteral(it.text) } ?:
+        ctx.ULONG_LITERAL()?.let { LiteralLiteral(it.text) } ?:
         ctx.REAL_LITERAL()?.let { LiteralLiteral(it.text) } ?:
         ctx.CHAR_LITERAL()?.let { LiteralLiteral(it.text) } ?:
         ctx.TRUE()?.let { LiteralLiteral(it.text) } ?:
@@ -839,9 +868,9 @@ class QuovaCompiler(val src: String) {
     private fun visit(ctx: QuovaParser.FunctionTypeContext): FunctionType =
         FunctionType(
             ctx.SUSPEND().bool(),
-            visit(ctx.type(0)),
-            List(ctx.type().size - 1) { i ->
-                visit(ctx.type(i + 1))
+            visit(ctx.typeOrVoid()),
+            List(ctx.type().size) { i ->
+                visit(ctx.type(i))
             }
         )
 
@@ -888,6 +917,7 @@ class QuovaCompiler(val src: String) {
 
     private fun visit(ctx: QuovaParser.InheritanceModifierContext): InheritanceModifier =
         ctx.FINAL()?.let { InheritanceModifier.FINAL } ?:
+        ctx.VIRTUAL()?.let { InheritanceModifier.VIRTUAL } ?:
         InheritanceModifier.ABSTRACT
 
     private fun visit(ctx: QuovaParser.VarianceModifierContext): VarianceModifier =
